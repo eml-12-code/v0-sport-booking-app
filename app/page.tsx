@@ -5,6 +5,14 @@ import { DatePicker } from "@/components/date-picker"
 import { ClassCard, type ClassItem } from "@/components/class-card"
 import { BottomNav } from "@/components/bottom-nav"
 
+// Helper to get time-based greeting
+const getGreeting = (): string => {
+  const hour = new Date().getHours()
+  if (hour < 12) return "Good morning"
+  if (hour < 17) return "Good afternoon"
+  return "Good evening"
+}
+
 // Helper to get date key for a date (offset from today)
 const getDateKey = (date: Date): number => {
   const today = new Date()
@@ -107,7 +115,7 @@ export default function HomePage() {
       <header className="px-5 pb-2">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-sm text-muted-foreground">Good morning</p>
+            <p className="text-sm text-muted-foreground">{getGreeting()}</p>
             <h1 className="text-2xl font-bold text-foreground">Find Your Class</h1>
           </div>
           <button className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center">
