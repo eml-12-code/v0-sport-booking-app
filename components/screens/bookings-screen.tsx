@@ -1,0 +1,160 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { getBookedClasses } from "@/app/actions/booking"
+
+interface BookingItem {
+  id: string
+  classId: string
+  className: string
+  time: string
+  room: string
+  instructor: string
+  date: string
+  location: string
+}
+
+type TabType = "upcoming" | "waiting" | "completed" | "cancelled"
+
+export function BookingsScreen() {
+  const [bookings, setBookings] = useState<BookingItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<TabType>("upcoming")
+
+  useEffect(() => {
+    async function fetchBookings() {
+      try {
+        const data = await getBookedClasses()
+        setBookings(data)
+      } catch (error) {
+        console.error("Error fetching bookings:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchBookings()
+  }, [])
+
+  const tabs: { id: TabType; label: string }[] = [
+    { id: "upcoming", label: "Upcoming" },
+    { id: "waiting", label: "Waiting" },
+    { id: "completed", label: "Completed" },
+    { id: "cancelled", label: "Cancelled" },
+  ]
+
+  // Filter bookings based on active tab
+  const filteredBookings = bookings.filter((booking) => {
+    const bookingDate = new Date(booking.date)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    if (activeTab === "upcoming") {
+      return bookingDate >= today
+    }
+    if (activeTab === "completed") {
+      return bookingDate < today
+    }
+    // waiting and cancelled would need additional fields in the database
+    return false
+  })
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).replace(/\//g, "-")
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Status Bar Spacer */}
+      <div className="h-12 bg-background" />
+      
+      {/* Header */}
+      <header className="px-5 py-4 flex items-center justify-between border-b border-border">
+        <h1 className="text-xl font-bold text-foreground">Bookings</h1>
+        <button className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+          <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
+      </header>
+
+      {/* Tabs */}
+      <div className="px-5 py-3 flex gap-6 overflow-x-auto border-b border-border">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`whitespace-nowrap pb-2 text-sm font-medium transition-colors ${
+              activeTab === tab.id
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Bookings List */}
+      <main className="px-5 py-4 pb-28">
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filteredBookings.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">No {activeTab} bookings</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredBookings.map((booking) => (
+              <div key={booking.id} className="bg-card rounded-xl p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-primary font-semibold">
+                      {formatDate(booking.date)} | {booking.time}
+                    </p>
+                    <h3 className="text-lg font-bold text-foreground uppercase mt-1">
+                      {booking.className}
+                    </h3>
+                    <div className="mt-3 space-y-1.5">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {booking.location} - {booking.room}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        {booking.instructor}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2m10 2V2M3 10h18M5 22h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        Group Class
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-primary">
+                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <p className="text-center text-muted-foreground text-sm py-4">End of bookings</p>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
