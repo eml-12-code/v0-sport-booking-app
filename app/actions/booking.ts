@@ -26,10 +26,10 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
     const formattedDate = date.toISOString().split('T')[0]
     
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, time, name, room, instructor, duration, spots, color 
+      `SELECT id, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
        FROM classes 
        WHERE date = ? AND location = ?
-       ORDER BY STR_TO_DATE(time, '%h:%i %p')`,
+       ORDER BY time`,
       [formattedDate, location]
     )
     
