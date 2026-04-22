@@ -2,6 +2,8 @@
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { toggleBooking } from "@/app/actions/booking"
+import { useTransition } from "react"
 
 export interface ClassItem {
   id: string
@@ -16,7 +18,8 @@ export interface ClassItem {
 
 interface ClassCardProps {
   classItem: ClassItem
-  onBook: (id: string) => void
+  isBooked: boolean
+  onBookingChange: (classId: string, isBooked: boolean) => void
 }
 
 const colorClasses = {
@@ -66,8 +69,18 @@ const classIcons: Record<string, JSX.Element> = {
   ),
 }
 
-export function ClassCard({ classItem, onBook }: ClassCardProps) {
+export function ClassCard({ classItem, isBooked, onBookingChange }: ClassCardProps) {
+  const [isPending, startTransition] = useTransition()
   const icon = classIcons[classItem.name] || classIcons.HIIT
+
+  const handleBook = () => {
+    startTransition(async () => {
+      const result = await toggleBooking(classItem.id)
+      if (result.success && result.isBooked !== undefined) {
+        onBookingChange(classItem.id, result.isBooked)
+      }
+    })
+  }
 
   return (
     <div className={cn(
@@ -84,7 +97,9 @@ export function ClassCard({ classItem, onBook }: ClassCardProps) {
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-medium text-muted-foreground">{classItem.time}</span>
-            <h3 className="text-base font-bold text-foreground">{classItem.name}</h3>
+            <h3 className="text-base font-bold text-foreground">
+              {classItem.name} {isBooked && "✓"}
+            </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               {classItem.room} • {classItem.instructor}
             </p>
@@ -97,10 +112,16 @@ export function ClassCard({ classItem, onBook }: ClassCardProps) {
       </div>
       <div className="mt-3 pt-3 border-t border-black/5">
         <Button
-          onClick={() => onBook(classItem.id)}
-          className="w-full h-9 rounded-xl font-semibold text-sm bg-foreground text-background hover:bg-foreground/90"
+          onClick={handleBook}
+          disabled={isPending}
+          className={cn(
+            "w-full h-9 rounded-xl font-semibold text-sm transition-colors",
+            isBooked 
+              ? "bg-red-500 text-white hover:bg-red-600" 
+              : "bg-foreground text-background hover:bg-foreground/90"
+          )}
         >
-          Book Now
+          {isPending ? "Processing..." : isBooked ? "Cancel Booking" : "Book Now"}
         </Button>
       </div>
     </div>
