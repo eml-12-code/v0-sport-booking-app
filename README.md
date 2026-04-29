@@ -34,11 +34,18 @@ To learn more, take a look at the following resources:
 
 <a href="https://v0.app/chat/api/kiro/clone/eml-12-code/v0-sport-booking-app" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>
 
-# Docker w
+# Docker 
 
 # Using Docker Compose (recommended)
+
+
+```bash
 docker compose up --build
+```
 
 # Or using Docker directly
+
+```bash
 docker build -t sport-booking-app .
 docker run -p 3000:3000 sport-booking-app
+```
