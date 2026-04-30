@@ -1,7 +1,26 @@
 'use server'
 
 import pool from '@/lib/db'
+import redis from '@/lib/redis'
 import { RowDataPacket, ResultSetHeader } from 'mysql2'
+
+// ---------
+
+import Redlock from 'redlock';
+
+// Initialize Redlock with your existing Redis instance
+
+const redlock = new Redlock(
+  [redis], 
+  {
+    driftFactor: 0.01, 
+    retryCount: 10,    // Retry 10 times if the lock is held by someone else
+    retryDelay: 200,   // Wait 200ms between retries
+    retryJitter: 200, 
+  }
+);
+
+// ---------
 
 export interface ClassItem {
   id: string
@@ -20,11 +39,26 @@ export interface BookingResult {
   isBooked?: boolean
 }
 
-// Get classes for a specific date and location
+// Helper to generate consistent cache keys
+const getCacheKey = (date: string, location: string) => `classes:${location}:${date}`
+
+
+// Get classes for a specific date and location with Redis Cache-Aside
 export async function getClasses(date: Date, location: string): Promise<ClassItem[]> {
+
   try {
     const formattedDate = date.toISOString().split('T')[0]
-    
+    const cacheKey = getCacheKey(formattedDate, location)
+
+    // 1. Try to get data from Redis
+    const cachedData = await redis.get(cacheKey)
+    if (cachedData) {
+      console.log('Redis Cache Hit for:', cacheKey)
+      return JSON.parse(cachedData)
+    }
+
+    // 2. If not in Redis, fetch from MySQL
+    console.log('Redis Cache Miss. Fetching from MySQL...')
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT id, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
        FROM classes 
@@ -32,8 +66,16 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
        ORDER BY time`,
       [formattedDate, location]
     )
-    
-    return rows as ClassItem[]
+
+    const classes = rows as ClassItem[]
+
+    // 3. Store in Redis for 1 hour (3600 seconds) if data exists
+    if (classes.length > 0) {
+      await redis.set(cacheKey, JSON.stringify(classes), 'EX', 3600)
+      console.log(`💾 Data saved to Redis cache: ${cacheKey}`)
+    }
+
+    return classes
   } catch (error) {
     console.error('Error fetching classes:', error)
     return []
@@ -55,61 +97,125 @@ export async function getBookedClasses(userId: string = 'anonymous'): Promise<st
   }
 }
 
-// Toggle booking for a class
+// Toggle booking for a class and invalidate relevant cache
+
+
 export async function toggleBooking(classId: string, userId: string = 'anonymous'): Promise<BookingResult> {
+  const lockKey = `locks:class:${classId}`;
+  
+  // 1. Acquire Distributed Lock (valid for 5000ms to prevent deadlocks)
+  let lock;
   try {
-    // Check if already booked
-    const [existing] = await pool.execute<RowDataPacket[]>(
-      `SELECT id FROM bookings WHERE class_id = ? AND user_id = ? AND status = 'confirmed'`,
-      [classId, userId]
-    )
+    lock = await redlock.acquire([lockKey], 5000);
+  } catch (err) {
+    return { success: false, message: 'System busy, please try again.' };
+  }
+
+  const connection = await pool.getConnection();
+  
+  try {
+    // 2. Start SQL Transaction
+    await connection.beginTransaction();
+
+    // 3. Select with FOR UPDATE (Database-level lock)
+    const [classRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT date, location, spots FROM classes WHERE id = ? FOR UPDATE`,
+      [classId]
+    );
+
+    if (classRows.length === 0) throw new Error('Class not found');
+    const classInfo = classRows[0];
+
+    // ... [Insert your Booking/Cancellation logic here from previous steps] ...
+    // Check if the user already has a confirmed booking
     
+    const [existing] = await connection.execute<RowDataPacket[]>(
+      `SELECT id FROM bookings WHERE class_id = ? AND user_id = ? AND status = 'confirmed' FOR UPDATE`,
+      [classId, userId]
+    );
+
+    let result: BookingResult;
+
     if (existing.length > 0) {
-      // Cancel booking
-      await pool.execute<ResultSetHeader>(
+      // --- LOGIC: CANCEL BOOKING ---
+      await connection.execute(
         `UPDATE bookings SET status = 'cancelled' WHERE class_id = ? AND user_id = ? AND status = 'confirmed'`,
         [classId, userId]
-      )
-      
-      // Restore spot
-      await pool.execute<ResultSetHeader>(
-        `UPDATE classes SET spots = spots + 1 WHERE id = ?`,
-        [classId]
-      )
-      
-      return { success: true, message: 'Booking cancelled', isBooked: false }
+      );
+      await connection.execute(`UPDATE classes SET spots = spots + 1 WHERE id = ?`, [classId]);
+      result = { success: true, message: 'Booking cancelled', isBooked: false };
     } else {
-      // Check available spots
-      const [classInfo] = await pool.execute<RowDataPacket[]>(
-        `SELECT spots FROM classes WHERE id = ?`,
-        [classId]
-      )
-      
-      if (classInfo.length === 0) {
-        return { success: false, message: 'Class not found' }
+    
+      // --- LOGIC: NEW BOOKING ---
+      if (classInfo.spots <= 0) {
+        throw new Error('No spots available');
       }
-      
-      if (classInfo[0].spots <= 0) {
-        return { success: false, message: 'No spots available' }
-      }
-      
-      // Create booking
-      await pool.execute<ResultSetHeader>(
+
+      await connection.execute(
         `INSERT INTO bookings (class_id, user_id, status) VALUES (?, ?, 'confirmed')
          ON DUPLICATE KEY UPDATE status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
         [classId, userId]
-      )
-      
-      // Decrease available spots
-      await pool.execute<ResultSetHeader>(
-        `UPDATE classes SET spots = spots - 1 WHERE id = ?`,
-        [classId]
-      )
-      
-      return { success: true, message: 'Class booked successfully', isBooked: true }
+      );
+      await connection.execute(`UPDATE classes SET spots = spots - 1 WHERE id = ?`, [classId]);
+      result = { success: true, message: 'Class booked successfully', isBooked: true };
     }
-  } catch (error) {
-    console.error('Error toggling booking:', error)
-    return { success: false, message: 'Failed to process booking' }
+
+
+    // 4. Commit SQL changes
+    await connection.commit();
+
+    // 5. Invalidate Cache
+    // Ensure date formatting matches your getCacheKey helper
+    const dateObj = new Date(classInfo.date);
+    const formattedDate = dateObj.toLocaleDateString('sv-SE'); // Result: YYYY-MM-DD
+    const cacheKey = getCacheKey(formattedDate, classInfo.location);
+    
+    await redis.del(cacheKey);
+
+    return result;
+
+
+  } catch (error: any) {
+    await connection.rollback();
+    return { success: false, message: error.message || 'Operation failed' };
+  } finally {
+    // 6. Release SQL Connection back to pool
+    connection.release();
+    
+    // 7. Release Redis Lock so others can proceed
+    try {
+      await lock.release();
+    } catch (e) {
+      // Lock might have expired already, safe to ignore
+    }
   }
 }
+
+
+
+
+
+// Debug
+export async function debugRedisCache(date: Date, location: string) {
+  try {
+    const formattedDate = date.toISOString().split('T')[0];
+    const cacheKey = `classes:${location}:${formattedDate}`;
+    
+    // 讀取快取內容
+    const data = await redis.get(cacheKey);
+    
+    if (data) {
+      console.log(`--- Redis Content for ${cacheKey} ---`);
+      console.log(JSON.parse(data)); // 印出解析後的 JSON
+      console.log(`--- End of Content ---`);
+    } else {
+      console.log(`No cache found for key: ${cacheKey}`);
+    }
+  } catch (error) {
+    console.error("Error reading Redis:", error);
+  }
+}
+
+
+
+

@@ -6,6 +6,7 @@ services:
     ports:
       - "0.0.0.0:3000:3000"
     environment:
+      # MySQL Config
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
       - MYSQL_HOST=mysql
@@ -13,11 +14,17 @@ services:
       - MYSQL_USER=app_user
       - MYSQL_PASSWORD=app_password
       - MYSQL_DATABASE=sport_booking
+      # Redis Config (Matches the service name below)
+      - REDIS_HOST=redis-cache  # 這裡必須對應上面的名字
+      - REDIS_PORT=6379
+
     depends_on:
+      redis-cache:
+        condition: service_started
       mysql:
         condition: service_healthy
-    restart: unless-stopped
 
+# ---- mysql Service ---
   mysql:
     image: mysql:8.0
     ports:
@@ -35,6 +42,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+# ---- Redis Service ---
+  redis-cache:
+    image: redis:alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:
