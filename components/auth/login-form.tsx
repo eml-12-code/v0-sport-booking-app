@@ -1,28 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
-import { Loader2 } from 'lucide-react'
+import { Apple, Github, Loader2 } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 
 export type LoginOAuthFlags = {
   google: boolean
   github: boolean
+  apple: boolean
 }
+
+type OAuthId = 'google' | 'github' | 'apple'
 
 export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
   const router = useRouter()
@@ -31,12 +22,12 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState<'credentials' | 'google' | 'github' | null>(
-    null,
-  )
+  const [loading, setLoading] = useState<
+    'credentials' | OAuthId | null
+  >(null)
   const [error, setError] = useState<string | null>(null)
 
-  const showDivider = oauth.google || oauth.github
+  const anyOAuth = oauth.google || oauth.github || oauth.apple
 
   async function onCredentialsSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -50,7 +41,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         callbackUrl,
       })
       if (res?.error) {
-        setError('Invalid username or password.')
+        setError('Invalid email or password.')
         return
       }
       router.push(callbackUrl)
@@ -60,7 +51,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
     }
   }
 
-  async function onOAuth(provider: 'google' | 'github') {
+  async function onOAuth(provider: OAuthId) {
     setError(null)
     setLoading(provider)
     try {
@@ -70,187 +61,217 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
     }
   }
 
+  const busy = loading !== null
+
   return (
-    <Card className="w-full max-w-md border-border/80 shadow-md">
-      <CardHeader className="space-y-1">
-        <div className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <svg
-              className="h-6 w-6 text-primary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
-          </div>
-          <CardTitle className="text-xl">Sign in to FitBook</CardTitle>
-        </div>
-        <CardDescription>
-          Use your account or continue with a connected provider.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <form onSubmit={onCredentialsSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              name="username"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="your.username"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error ? (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={loading !== null}
+    <div className="flex w-full max-w-sm flex-col items-center px-4">
+      <header className="mb-10 w-full space-y-2 text-center">
+        <h1 className="text-[26px] font-semibold tracking-tight text-white">
+          Welcome to FitBook
+        </h1>
+        <p className="text-[15px] text-neutral-500">
+          Book classes and manage your membership
+        </p>
+      </header>
+
+      <div className="flex w-full flex-col gap-3">
+        <OAuthRow
+          label="Continue with Google"
+          icon={<GoogleGlyph />}
+          disabled={busy || !oauth.google}
+          title={
+            oauth.google
+              ? undefined
+              : 'Add AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET to enable Google sign-in'
+          }
+          onClick={() => onOAuth('google')}
+          loading={loading === 'google'}
+        />
+        <OAuthRow
+          label="Continue with GitHub"
+          icon={<Github className="size-[22px] shrink-0 text-white" aria-hidden />}
+          disabled={busy || !oauth.github}
+          title={
+            oauth.github
+              ? undefined
+              : 'Add AUTH_GITHUB_ID and AUTH_GITHUB_SECRET to enable GitHub sign-in'
+          }
+          onClick={() => onOAuth('github')}
+          loading={loading === 'github'}
+        />
+        <OAuthRow
+          label="Continue with Apple"
+          icon={<Apple className="size-[22px] shrink-0 text-white" aria-hidden />}
+          disabled={busy || !oauth.apple}
+          title={
+            oauth.apple
+              ? undefined
+              : 'Add AUTH_APPLE_ID and AUTH_APPLE_SECRET to enable Apple sign-in'
+          }
+          onClick={() => onOAuth('apple')}
+          loading={loading === 'apple'}
+        />
+      </div>
+
+      {!anyOAuth ? (
+        <p className="mt-4 max-w-sm text-center text-xs leading-relaxed text-neutral-600">
+          Configure OAuth client IDs in{' '}
+          <code className="rounded bg-white/5 px-1 py-0.5 text-[0.65rem] text-neutral-400">
+            .env.local
+          </code>{' '}
+          to enable the buttons above.
+        </p>
+      ) : null}
+
+      <form
+        onSubmit={onCredentialsSubmit}
+        className="mt-10 flex w-full flex-col gap-5"
+      >
+        <div className="space-y-2">
+          <label
+            htmlFor="email"
+            className="block text-left text-[13px] text-neutral-500"
           >
-            {loading === 'credentials' ? (
-              <>
-                <Loader2 className="animate-spin" />
-                Signing in…
-              </>
-            ) : (
-              'Sign in'
+            Email
+          </label>
+          <input
+            id="email"
+            name="username"
+            type="text"
+            inputMode="email"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Your email address"
+            required
+            className={cn(
+              'h-12 w-full rounded-lg border bg-[#141414] px-3.5 text-[15px] text-white outline-none transition-[box-shadow,border-color]',
+              'border-[#3f3f46] placeholder:text-neutral-600',
+              'focus-visible:border-[#c9a227] focus-visible:ring-2 focus-visible:ring-[#c9a227]/35',
             )}
-          </Button>
-        </form>
+          />
+        </div>
 
-        {showDivider ? (
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <Separator />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">
-                Or continue with
-              </span>
-            </div>
-          </div>
-        ) : null}
+        <div className="space-y-2">
+          <label
+            htmlFor="password"
+            className="block text-left text-[13px] text-neutral-500"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            className={cn(
+              'h-12 w-full rounded-lg border bg-[#141414] px-3.5 text-[15px] text-white outline-none transition-[box-shadow,border-color]',
+              'border-[#3f3f46] placeholder:text-neutral-600',
+              'focus-visible:border-[#c9a227] focus-visible:ring-2 focus-visible:ring-[#c9a227]/35',
+            )}
+          />
+        </div>
 
-        {showDivider ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {oauth.google ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => onOAuth('google')}
-                disabled={loading !== null}
-              >
-                {loading === 'google' ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <GoogleGlyph />
-                )}
-                Google
-              </Button>
-            ) : null}
-            {oauth.github ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => onOAuth('github')}
-                disabled={loading !== null}
-              >
-                {loading === 'github' ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <GitHubGlyph />
-                )}
-                GitHub
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!showDivider ? (
-          <p className="text-center text-xs text-muted-foreground">
-            Add{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-[0.7rem]">
-              AUTH_GOOGLE_ID
-            </code>{' '}
-            /{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-[0.7rem]">
-              AUTH_GITHUB_ID
-            </code>{' '}
-            in{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-[0.7rem]">
-              .env.local
-            </code>{' '}
-            to enable social sign-in.
+        {error ? (
+          <p className="text-center text-sm text-red-400/95" role="alert">
+            {error}
           </p>
         ) : null}
-      </CardContent>
-      <CardFooter className="flex flex-col gap-3 border-t pt-6">
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
-          <span className="font-medium text-foreground">Ask staff to register you</span>
-        </p>
-        <Button variant="ghost" className="w-full" asChild>
-          <Link href="/">Back to app</Link>
-        </Button>
-      </CardFooter>
-    </Card>
+
+        <button
+          type="submit"
+          disabled={busy}
+          className={cn(
+            'flex h-12 w-full items-center justify-center gap-2 rounded-lg text-[15px] font-medium text-white transition-colors',
+            'bg-[#2c2c2c] hover:bg-[#353535] disabled:cursor-not-allowed disabled:opacity-50',
+          )}
+        >
+          {loading === 'credentials' ? (
+            <>
+              <Loader2 className="size-5 animate-spin text-white" aria-hidden />
+              Continuing…
+            </>
+          ) : (
+            'Continue'
+          )}
+        </button>
+      </form>
+
+      <p className="mt-12 text-center text-[14px] text-neutral-500">
+        Don&apos;t have an account?{' '}
+        <a
+          href="#"
+          className="font-medium text-neutral-200 underline-offset-4 hover:text-white hover:underline"
+          onClick={(e) => e.preventDefault()}
+        >
+          Sign up
+        </a>
+      </p>
+    </div>
+  )
+}
+
+function OAuthRow({
+  label,
+  icon,
+  onClick,
+  disabled,
+  loading,
+  title,
+}: {
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+  disabled: boolean
+  loading: boolean
+  title?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={cn(
+        'flex h-12 w-full items-center gap-3 rounded-lg px-4 text-[15px] font-medium text-white transition-colors',
+        'bg-[#2c2c2c] hover:bg-[#353535] disabled:cursor-not-allowed disabled:opacity-40',
+      )}
+    >
+      <span className="flex size-[22px] shrink-0 items-center justify-center">
+        {loading ? (
+          <Loader2 className="size-5 animate-spin text-white" aria-hidden />
+        ) : (
+          icon
+        )}
+      </span>
+      <span className="flex-1 text-center pr-[22px]">{label}</span>
+    </button>
   )
 }
 
 function GoogleGlyph() {
   return (
-    <svg className="size-4" viewBox="0 0 24 24" aria-hidden>
+    <svg className="size-[22px] shrink-0" viewBox="0 0 24 24" aria-hidden>
       <path
-        fill="currentColor"
+        fill="#4285F4"
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
       />
       <path
-        fill="currentColor"
+        fill="#34A853"
         d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
       />
       <path
-        fill="currentColor"
+        fill="#FBBC05"
         d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
       />
       <path
-        fill="currentColor"
+        fill="#EA4335"
         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
       />
-    </svg>
-  )
-}
-
-function GitHubGlyph() {
-  return (
-    <svg className="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
     </svg>
   )
 }

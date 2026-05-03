@@ -16,12 +16,24 @@ function oauthFlags(): LoginOAuthFlags {
     github: !!(
       process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET
     ),
+    apple: !!(
+      process.env.AUTH_APPLE_ID && process.env.AUTH_APPLE_SECRET
+    ),
   }
 }
 
 function LoginFormFallback() {
   return (
-    <div className="h-[420px] w-full max-w-md animate-pulse rounded-xl border bg-muted/40" />
+    <div className="flex w-full max-w-sm flex-col items-center gap-8 px-4">
+      <div className="h-9 w-56 animate-pulse rounded-lg bg-white/10" />
+      <div className="h-5 w-72 animate-pulse rounded bg-white/10" />
+      <div className="flex w-full flex-col gap-3">
+        <div className="h-12 w-full animate-pulse rounded-lg bg-white/10" />
+        <div className="h-12 w-full animate-pulse rounded-lg bg-white/10" />
+        <div className="h-12 w-full animate-pulse rounded-lg bg-white/10" />
+      </div>
+      <div className="mt-4 h-24 w-full animate-pulse rounded-lg bg-white/10" />
+    </div>
   )
 }
 
@@ -29,9 +41,9 @@ export default function LoginPage() {
   const oauth = oauthFlags()
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="h-12" aria-hidden />
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-lg flex-col items-center justify-center px-4 pb-16 pt-6">
+    <div className="min-h-screen bg-[#090909] font-sans antialiased selection:bg-[#c9a227]/40 selection:text-white">
+      <div className="h-12 shrink-0 pt-[env(safe-area-inset-top,0px)]" aria-hidden />
+      <div className="mx-auto flex min-h-[calc(100vh-3rem-env(safe-area-inset-top,0px))] max-w-lg flex-col items-center justify-center px-2 pb-20 pt-6">
         <Suspense fallback={<LoginFormFallback />}>
           <LoginForm oauth={oauth} />
         </Suspense>
