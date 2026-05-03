@@ -15,7 +15,7 @@ services:
       - MYSQL_PASSWORD=app_password
       - MYSQL_DATABASE=sport_booking
       # Redis Config (Matches the service name below)
-      - REDIS_HOST=redis-cache  # 這裡必須對應上面的名字
+      - REDIS_HOST=redis-cache  # 
       - REDIS_PORT=6379
 
     depends_on:

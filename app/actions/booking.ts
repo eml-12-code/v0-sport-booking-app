@@ -76,6 +76,7 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
     }
 
     return classes
+
   } catch (error) {
     console.error('Error fetching classes:', error)
     return []
@@ -84,13 +85,27 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
 
 // Get user's booked class IDs
 export async function getBookedClasses(userId: string = 'anonymous'): Promise<string[]> {
+  
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT class_id FROM bookings WHERE user_id = ? AND status = 'confirmed'`,
-      [userId]
-    )
+      `SELECT 
+        b.id, 
+        b.class_id as classId, 
+        c.name as className, 
+        DATE_FORMAT(c.time, '%l:%i %p') as time, 
+        c.room, 
+        c.instructor, 
+        c.date, 
+        c.location,
+        c.spots
+       FROM bookings b
+       JOIN classes c ON b.class_id = c.id
+       WHERE b.user_id = ? AND b.status = 'confirmed'
+       ORDER BY c.date ASC, c.time ASC`,
+      [userId]    )
     
     return rows.map((row) => row.class_id)
+
   } catch (error) {
     console.error('Error fetching booked classes:', error)
     return []
@@ -124,9 +139,9 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
     );
 
     if (classRows.length === 0) throw new Error('Class not found');
+
     const classInfo = classRows[0];
 
-    // ... [Insert your Booking/Cancellation logic here from previous steps] ...
     // Check if the user already has a confirmed booking
     
     const [existing] = await connection.execute<RowDataPacket[]>(
@@ -137,6 +152,7 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
     let result: BookingResult;
 
     if (existing.length > 0) {
+    
       // --- LOGIC: CANCEL BOOKING ---
       await connection.execute(
         `UPDATE bookings SET status = 'cancelled' WHERE class_id = ? AND user_id = ? AND status = 'confirmed'`,
