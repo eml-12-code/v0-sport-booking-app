@@ -66,7 +66,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
   return (
     <div className="flex w-full max-w-sm flex-col items-center px-4">
       <header className="mb-10 w-full space-y-2 text-center">
-        <h1 className="text-[26px] font-semibold tracking-tight text-white">
+        <h1 className="text-[26px] font-semibold tracking-tight text-neutral-900">
           Welcome to FitBook
         </h1>
         <p className="text-[15px] text-neutral-500">
@@ -89,7 +89,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         />
         <OAuthRow
           label="Continue with GitHub"
-          icon={<Github className="size-[22px] shrink-0 text-white" aria-hidden />}
+          icon={<Github className="size-[22px] shrink-0 text-neutral-900" aria-hidden />}
           disabled={busy || !oauth.github}
           title={
             oauth.github
@@ -101,7 +101,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         />
         <OAuthRow
           label="Continue with Apple"
-          icon={<Apple className="size-[22px] shrink-0 text-white" aria-hidden />}
+          icon={<Apple className="size-[22px] shrink-0 text-neutral-900" aria-hidden />}
           disabled={busy || !oauth.apple}
           title={
             oauth.apple
@@ -116,7 +116,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
       {!anyOAuth ? (
         <p className="mt-4 max-w-sm text-center text-xs leading-relaxed text-neutral-600">
           Configure OAuth client IDs in{' '}
-          <code className="rounded bg-white/5 px-1 py-0.5 text-[0.65rem] text-neutral-400">
+          <code className="rounded bg-neutral-100 px-1 py-0.5 text-[0.65rem] text-neutral-600">
             .env.local
           </code>{' '}
           to enable the buttons above.
@@ -145,8 +145,8 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
             placeholder="Your email address"
             required
             className={cn(
-              'h-12 w-full rounded-lg border bg-[#141414] px-3.5 text-[15px] text-white outline-none transition-[box-shadow,border-color]',
-              'border-[#3f3f46] placeholder:text-neutral-600',
+              'h-12 w-full rounded-lg border bg-white px-3.5 text-[15px] text-neutral-900 outline-none transition-[box-shadow,border-color]',
+              'border-neutral-300 placeholder:text-neutral-400',
               'focus-visible:border-[#c9a227] focus-visible:ring-2 focus-visible:ring-[#c9a227]/35',
             )}
           />
@@ -169,8 +169,8 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
             placeholder="••••••••"
             required
             className={cn(
-              'h-12 w-full rounded-lg border bg-[#141414] px-3.5 text-[15px] text-white outline-none transition-[box-shadow,border-color]',
-              'border-[#3f3f46] placeholder:text-neutral-600',
+              'h-12 w-full rounded-lg border bg-white px-3.5 text-[15px] text-neutral-900 outline-none transition-[box-shadow,border-color]',
+              'border-neutral-300 placeholder:text-neutral-400',
               'focus-visible:border-[#c9a227] focus-visible:ring-2 focus-visible:ring-[#c9a227]/35',
             )}
           />
@@ -187,7 +187,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
           disabled={busy}
           className={cn(
             'flex h-12 w-full items-center justify-center gap-2 rounded-lg text-[15px] font-medium text-white transition-colors',
-            'bg-[#2c2c2c] hover:bg-[#353535] disabled:cursor-not-allowed disabled:opacity-50',
+            'bg-neutral-900 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
           {loading === 'credentials' ? (
@@ -205,7 +205,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         Don&apos;t have an account?{' '}
         <a
           href="#"
-          className="font-medium text-neutral-200 underline-offset-4 hover:text-white hover:underline"
+          className="font-medium text-neutral-900 underline-offset-4 hover:text-neutral-700 hover:underline"
           onClick={(e) => e.preventDefault()}
         >
           Sign up
@@ -237,13 +237,13 @@ function OAuthRow({
       disabled={disabled}
       title={title}
       className={cn(
-        'flex h-12 w-full items-center gap-3 rounded-lg px-4 text-[15px] font-medium text-white transition-colors',
-        'bg-[#2c2c2c] hover:bg-[#353535] disabled:cursor-not-allowed disabled:opacity-40',
+        'flex h-12 w-full items-center gap-3 rounded-lg border border-neutral-300 bg-white px-4 text-[15px] font-medium text-neutral-900 transition-colors',
+        'hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40',
       )}
     >
       <span className="flex size-[22px] shrink-0 items-center justify-center">
         {loading ? (
-          <Loader2 className="size-5 animate-spin text-white" aria-hidden />
+          <Loader2 className="size-5 animate-spin text-neutral-900" aria-hidden />
         ) : (
           icon
         )}
