@@ -18,6 +18,8 @@ services:
       - REDIS_HOST=redis-cache  # 
       - REDIS_PORT=6379
 
+    env_file:
+      - .env.local
     depends_on:
       redis-cache:
         condition: service_started

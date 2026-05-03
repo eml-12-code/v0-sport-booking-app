@@ -19,6 +19,12 @@ const providers: NextAuthConfig['providers'] = [
       const password = credentials?.password as string | undefined
       if (!username || !password) return null
 
+      console.log('username:', username)
+      console.log('password:', password)  
+
+      console.log('GOOGLE_ID:', process.env.AUTH_GOOGLE_ID  )
+      console.log('GOOGLE_SECRET:', process.env.AUTH_GOOGLE_SECRET)
+      
       const expectedUser =
         process.env.AUTH_DEMO_USERNAME ??
         (process.env.NODE_ENV !== 'production' ? 'demo' : '')
