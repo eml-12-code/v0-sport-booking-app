@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: 'Sign in to FitBook with your account or a connected provider.',
 }
 
+export const dynamic = 'force-dynamic'
+
 function oauthFlags(): LoginOAuthFlags {
   return {
     google: !!(
