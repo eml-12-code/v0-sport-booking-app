@@ -19,6 +19,7 @@ export interface ClassItem {
 interface ClassCardProps {
   classItem: ClassItem
   isBooked: boolean
+  userId: string
   onBookingChange: (classId: string, isBooked: boolean) => void
 }
 
@@ -69,13 +70,13 @@ const classIcons: Record<string, JSX.Element> = {
   ),
 }
 
-export function ClassCard({ classItem, isBooked, onBookingChange }: ClassCardProps) {
+export function ClassCard({ classItem, isBooked, userId, onBookingChange }: ClassCardProps) {
   const [isPending, startTransition] = useTransition()
   const icon = classIcons[classItem.name] || classIcons.HIIT
 
   const handleBook = () => {
     startTransition(async () => {
-      const result = await toggleBooking(classItem.id)
+      const result = await toggleBooking(classItem.id, userId)
       if (result.success && result.isBooked !== undefined) {
         onBookingChange(classItem.id, result.isBooked)
       }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { getBookedClasses } from "@/app/actions/booking"
-import { toggleBooking } from "@/app/actions/booking"
+import { useSession } from "next-auth/react"
 
 
 interface BookingItem {
@@ -37,14 +37,19 @@ type TabType = "upcoming" | "waiting" | "completed" | "cancelled"
 
 export function BookingsScreen() {
   const [bookings, setBookings] = useState<BookingItem[]>([])
-  
+  const { data: session } = useSession()
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<TabType>("upcoming")
+
+  const userId =
+    session?.user?.email?.trim() ||
+    session?.user?.name?.trim() ||
+    "anonymous"
 
   useEffect(() => {
     async function fetchBookings() {
       try {
-        const data = await getBookedClasses()
+        const data = await getBookedClasses(userId)
         setBookings(data.filter(isBookingItem))
       } catch (error) {
         console.error("Error fetching bookings:", error)
@@ -53,7 +58,7 @@ export function BookingsScreen() {
       }
     }
     fetchBookings()
-  }, [])
+  }, [userId])
 
   const tabs: { id: TabType; label: string }[] = [
     { id: "upcoming", label: "Upcoming" },

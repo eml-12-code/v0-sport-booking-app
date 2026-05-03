@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { ClassCard, type ClassItem } from "@/components/class-card"
 import { getClasses, getBookedClasses } from "@/app/actions/booking"
+import { useSession } from "next-auth/react"
 
 interface ClassListProps {
   selectedDate: Date
@@ -13,22 +14,28 @@ export function ClassList({ selectedDate, selectedLocation }: ClassListProps) {
   const [classes, setClasses] = useState<ClassItem[]>([])
   const [bookedClasses, setBookedClasses] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const { data: session } = useSession()
+
+  const userId =
+    session?.user?.email?.trim() ||
+    session?.user?.name?.trim() ||
+    "anonymous"
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
     try {
       const [classesData, bookedData] = await Promise.all([
         getClasses(selectedDate, selectedLocation),
-        getBookedClasses()
+        getBookedClasses(userId)
       ])
       setClasses(classesData)
-      setBookedClasses(bookedData)
+      setBookedClasses(bookedData.map((booking) => booking.classId))
     } catch (error) {
       console.error("Error fetching data:", error)
     } finally {
       setIsLoading(false)
     }
-  }, [selectedDate, selectedLocation])
+  }, [selectedDate, selectedLocation, userId])
 
   useEffect(() => {
     fetchData()
@@ -87,6 +94,7 @@ export function ClassList({ selectedDate, selectedLocation }: ClassListProps) {
             key={classItem.id}
             classItem={classItem}
             isBooked={bookedClasses.includes(classItem.id)}
+            userId={userId}
             onBookingChange={handleBookingChange}
           />
         ))}

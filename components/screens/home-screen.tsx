@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { getBookedClasses } from "@/app/actions/booking"
+import { useSession } from "next-auth/react"
 
 interface BookingItem {
   id: string
@@ -17,11 +18,17 @@ interface BookingItem {
 export function HomeScreen() {
   const [todayBookings, setTodayBookings] = useState<BookingItem[]>([])
   const [loading, setLoading] = useState(true)
+  const { data: session } = useSession()
+
+  const userId =
+    session?.user?.email?.trim() ||
+    session?.user?.name?.trim() ||
+    "anonymous"
 
   useEffect(() => {
     async function fetchTodayBookings() {
       try {
-        const bookings = await getBookedClasses()
+        const bookings = await getBookedClasses(userId)
         // Filter for today's bookings
         const today = new Date().toISOString().split('T')[0]
         const todayOnly = bookings.filter((b: BookingItem) => b.date === today)
@@ -33,7 +40,7 @@ export function HomeScreen() {
       }
     }
     fetchTodayBookings()
-  }, [])
+  }, [userId])
 
   return (
     <div className="min-h-screen bg-background">
