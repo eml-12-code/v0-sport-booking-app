@@ -39,6 +39,18 @@ export interface BookingResult {
   isBooked?: boolean
 }
 
+export interface BookedClassItem {
+  id: string
+  classId: string
+  className: string
+  time: string
+  room: string
+  instructor: string
+  date: string
+  location: string
+  spots: number
+}
+
 // Helper to generate consistent cache keys
 const getCacheKey = (date: string, location: string) => `classes:${location}:${date}`
 
@@ -83,8 +95,10 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
   }
 }
 
-// Get user's booked class IDs
-export async function getBookedClasses(userId: string = 'anonymous'): Promise<string[]> {
+// Get user's booked classes
+export async function getBookedClasses(
+  userId: string = 'anonymous',
+): Promise<BookedClassItem[]> {
   
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
@@ -104,7 +118,17 @@ export async function getBookedClasses(userId: string = 'anonymous'): Promise<st
        ORDER BY c.date ASC, c.time ASC`,
       [userId]    )
     
-    return rows.map((row) => row.class_id)
+    return rows.map((row) => ({
+      id: String(row.id),
+      classId: String(row.classId),
+      className: String(row.className),
+      time: String(row.time),
+      room: String(row.room),
+      instructor: String(row.instructor),
+      date: new Date(row.date).toISOString().split('T')[0],
+      location: String(row.location),
+      spots: Number(row.spots ?? 0),
+    }))
 
   } catch (error) {
     console.error('Error fetching booked classes:', error)

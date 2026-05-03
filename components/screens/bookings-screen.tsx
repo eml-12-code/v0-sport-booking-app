@@ -17,6 +17,22 @@ interface BookingItem {
   spots: number
 }
 
+function isBookingItem(value: unknown): value is BookingItem {
+  if (!value || typeof value !== "object") return false
+  const candidate = value as Partial<BookingItem>
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.classId === "string" &&
+    typeof candidate.className === "string" &&
+    typeof candidate.time === "string" &&
+    typeof candidate.room === "string" &&
+    typeof candidate.instructor === "string" &&
+    typeof candidate.date === "string" &&
+    typeof candidate.location === "string" &&
+    typeof candidate.spots === "number"
+  )
+}
+
 type TabType = "upcoming" | "waiting" | "completed" | "cancelled"
 
 export function BookingsScreen() {
@@ -29,7 +45,7 @@ export function BookingsScreen() {
     async function fetchBookings() {
       try {
         const data = await getBookedClasses()
-        setBookings(data)
+        setBookings(data.filter(isBookingItem))
       } catch (error) {
         console.error("Error fetching bookings:", error)
       } finally {
