@@ -2,6 +2,7 @@ import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import GitHub from 'next-auth/providers/github'
 import Google from 'next-auth/providers/google'
+import { NextResponse } from 'next/server'
 
 import type { NextAuthConfig } from 'next-auth'
 
@@ -61,4 +62,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: '/login' },
   session: { strategy: 'jwt' },
   trustHost: true,
+  callbacks: {
+    authorized({ auth, request: { nextUrl } }) {
+      const loggedIn = !!auth?.user
+      const onLogin = nextUrl.pathname.startsWith('/login')
+
+      if (onLogin) {
+        if (loggedIn) {
+          return NextResponse.redirect(new URL('/', nextUrl))
+        }
+        return true
+      }
+
+      return loggedIn
+    },
+  },
 })
