@@ -53,6 +53,10 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
 
   async function onOAuth(provider: OAuthId) {
     setError(null)
+    if (!oauth[provider]) {
+      setError(`"${provider}" sign-in is not configured yet.`)
+      return
+    }
     setLoading(provider)
     try {
       await signIn(provider, { callbackUrl })
@@ -78,7 +82,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         <OAuthRow
           label="Continue with Google"
           icon={<GoogleGlyph />}
-          disabled={busy || !oauth.google}
+          disabled={busy}
           title={
             oauth.google
               ? undefined
@@ -90,7 +94,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         <OAuthRow
           label="Continue with GitHub"
           icon={<Github className="size-[22px] shrink-0 text-neutral-900" aria-hidden />}
-          disabled={busy || !oauth.github}
+          disabled={busy}
           title={
             oauth.github
               ? undefined
@@ -102,7 +106,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         <OAuthRow
           label="Continue with Apple"
           icon={<Apple className="size-[22px] shrink-0 text-neutral-900" aria-hidden />}
-          disabled={busy || !oauth.apple}
+          disabled={busy}
           title={
             oauth.apple
               ? undefined
