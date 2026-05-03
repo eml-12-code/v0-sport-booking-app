@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { DatePicker } from "@/components/date-picker"
 import { ClassList } from "@/components/class-list"
+import { useSession } from "next-auth/react"
 
 const locations = ["Hong Kong", "Kowloon", "Macau"] as const
 
@@ -18,6 +19,12 @@ export function ClassesScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedLocation, setSelectedLocation] = useState<string>(locations[0])
   const [isLocationOpen, setIsLocationOpen] = useState(false)
+  const { data: session } = useSession()
+
+  const userDisplayName =
+    session?.user?.name?.trim() ||
+    session?.user?.email?.split("@")[0]?.trim() ||
+    ""
 
   return (
     <>
@@ -64,7 +71,9 @@ export function ClassesScreen() {
 
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-sm text-muted-foreground">{getGreeting()}</p>
+            <p className="text-sm text-muted-foreground">
+              {userDisplayName ? `${getGreeting()}, ${userDisplayName}` : getGreeting()}
+            </p>
             <h1 className="text-2xl font-bold text-foreground">Find Your Class</h1>
           </div>
           <button className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center">
