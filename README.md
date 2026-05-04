@@ -40,6 +40,7 @@ To learn more, take a look at the following resources:
 
 
 ```bash
+docker-compose down -v 
 docker compose up --build
 ```
 
