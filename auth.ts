@@ -5,7 +5,7 @@ import GitHub from 'next-auth/providers/github'
 import Google from 'next-auth/providers/google'
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs' // [ADD] For comparing hashed passwords
-import { db } from '@/lib/db' // [ADD] Import your database connection (adjust path as needed)
+import pool from '@/lib/db'
 
 import type { NextAuthConfig } from 'next-auth'
 
@@ -47,12 +47,23 @@ const providers: NextAuthConfig['providers'] = [
       try {
         // Query the database for the user by username or email
         // We select the 'password' hash to compare it below
-        const [rows]: any = await db.execute(
-          'SELECT id, username, email, password FROM accounts WHERE username = ? OR email = ? LIMIT 1',
-          [username, username]
+        const [rows]: any = await pool.execute(
+          'SELECT id, username, email, password FROM accounts WHERE email = ? LIMIT 1',
+          [username ]
         )
         
+        // [ADD THESE LOGS]
+        console.log('--- Database Query Result ---')
+        console.log('Raw rows from DB:', JSON.stringify(rows, null, 2)) 
+        
         const user = rows[0] // Get the first user found
+
+        if (user) {
+          console.log('Found User Object:', user)
+          console.log('Hashed Password in DB:', user.password)
+        } else {
+          console.log('No user found for email:', username)
+        }
 
          if (user && user.password) {
           // Compare the provided plain-text password with the 60-char bcrypt hash in DB
