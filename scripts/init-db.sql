@@ -28,6 +28,18 @@ CREATE TABLE IF NOT EXISTS bookings (
   UNIQUE KEY unique_booking (class_id, user_id, status)
 );
 
+-- Bookings table to store user bookings
+CREATE TABLE IF NOT EXISTS accounts (
+  user_id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(36) NOT NULL,
+  password VARCHAR(36) NOT NULL,
+  email VARCHAR(36) NOT NULL,
+  date DATE NOT NULL,
+  active ENUM('active', 'cancel') DEFAULT 'active',
+  member_level ENUM('1', '2', '3', '4', '5') DEFAULT '1',
+  oauth_provider ARCHAR(36) NOT NULL
+);
+
 -- Insert sample classes for today
 INSERT INTO classes (id, time, name, room, instructor, duration, spots, color, date, location) VALUES
 ('HK-1', '06:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 8, 'blue', CURDATE(), 'Hong Kong'),

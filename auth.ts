@@ -92,5 +92,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       return loggedIn
     },
+    async signIn({ user, account }) {
+      // Create account record for OAuth sign-ins via API route (to avoid edge runtime issues)
+      if (account && account.provider !== 'credentials' && user.email) {
+        try {
+          // Use internal API to create account (runs in Node.js runtime, not edge)
+          const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL 
+            ? `https://${process.env.VERCEL_URL}` 
+            : 'http://localhost:3000'
+          
+          await fetch(`${baseUrl}/api/auth/oauth-account`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: user.name || user.email.split('@')[0],
+              email: user.email,
+              provider: account.provider,
+            }),
+          })
+        } catch (error) {
+          console.error('Failed to create account for OAuth user:', error)
+          // Don't block sign-in if account creation fails
+        }
+      }
+      return true
+    },
   },
 })
