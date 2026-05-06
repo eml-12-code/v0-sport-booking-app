@@ -1,6 +1,8 @@
-import { auth } from '@/auth'
+import NextAuth from 'next-auth'
+import { authConfig } from './auth.config'
 
-export default auth
+// Use the light config to initialize the middleware
+export default NextAuth(authConfig).auth
 
 export const config = {
   matcher: [
