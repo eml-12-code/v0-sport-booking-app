@@ -1,13 +1,18 @@
-// auth.config.ts
-
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import Apple from 'next-auth/providers/apple'
 import GitHub from 'next-auth/providers/github'
 
-
-export default {
-  providers: [Google], // Add other OAuth providers here
+export const authConfig = {
+  pages: { signIn: '/login' },
+  session: { strategy: 'jwt' },
+  trustHost: true,
+  providers: [
+    // OAuth providers are generally Edge-compatible
+    Google({ clientId: process.env.AUTH_GOOGLE_ID, clientSecret: process.env.AUTH_GOOGLE_SECRET }),
+    GitHub({ clientId: process.env.AUTH_GITHUB_ID, clientSecret: process.env.AUTH_GITHUB_SECRET }),
+    Apple({ clientId: process.env.AUTH_APPLE_ID, clientSecret: process.env.AUTH_APPLE_SECRET }),
+  ], 
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const loggedIn = !!auth?.user;
