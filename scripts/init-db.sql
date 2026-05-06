@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   date DATE NOT NULL,
   active ENUM('active', 'cancel') DEFAULT 'active',
   member_level ENUM('1', '2', '3', '4', '5') DEFAULT '1',
-  oauth_provider ARCHAR(36) NOT NULL
+  oauth_provider VARCHAR(36) NOT NULL
 );
 
 -- Insert sample classes for today
