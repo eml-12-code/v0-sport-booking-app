@@ -30,7 +30,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             [username]
           )
           console.log('Username' , username )
-          console.log('Password' ,)
+          console.log('Password' , password )
           console.log('--- Database Query Result ---')
           console.log('Raw rows from DB:', JSON.stringify(rows, null, 2)) 
           
