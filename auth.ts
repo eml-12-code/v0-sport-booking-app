@@ -4,7 +4,6 @@ import Credentials from 'next-auth/providers/credentials'
 import GitHub from 'next-auth/providers/github'
 import Google from 'next-auth/providers/google'
 import { NextResponse } from 'next/server'
-import pool from '@/lib/db'
 
 import type { NextAuthConfig } from 'next-auth'
 
@@ -94,28 +93,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return loggedIn
     },
     async signIn({ user, account }) {
-      // Create account record for OAuth sign-ins
+      // Create account record for OAuth sign-ins via API route (to avoid edge runtime issues)
       if (account && account.provider !== 'credentials' && user.email) {
         try {
-          // Check if account already exists
-          const [existingUsers] = await pool.execute(
-            'SELECT id FROM accounts WHERE email = ?',
-            [user.email]
-          )
-
-          if (!Array.isArray(existingUsers) || existingUsers.length === 0) {
-            // Create new account for OAuth user
-            const username = user.name || user.email.split('@')[0]
-            const startDate = new Date().toISOString().split('T')[0]
-            const currentActive = true
-            const memberLevel = 1
-
-            await pool.execute(
-              `INSERT INTO accounts (username, password, email, start_date, current_active, member_level, oauth_provider) 
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [username, null, user.email, startDate, currentActive, memberLevel, account.provider]
-            )
-          }
+          // Use internal API to create account (runs in Node.js runtime, not edge)
+          const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL 
+            ? `https://${process.env.VERCEL_URL}` 
+            : 'http://localhost:3000'
+          
+          await fetch(`${baseUrl}/api/auth/oauth-account`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: user.name || user.email.split('@')[0],
+              email: user.email,
+              provider: account.provider,
+            }),
+          })
         } catch (error) {
           console.error('Failed to create account for OAuth user:', error)
           // Don't block sign-in if account creation fails
