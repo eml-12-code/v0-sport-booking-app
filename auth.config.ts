@@ -2,6 +2,9 @@
 
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
+import Apple from 'next-auth/providers/apple'
+import GitHub from 'next-auth/providers/github'
+
 
 export default {
   providers: [Google], // Add other OAuth providers here
