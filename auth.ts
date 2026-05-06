@@ -26,10 +26,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 2. [DB CHECK]
         try {
           const [rows]: any = await pool.execute(
-            'SELECT id, username, email, password FROM accounts WHERE email = ? LIMIT 1',
+            'SELECT user_id, username, email, password FROM accounts WHERE email = ? LIMIT 1',
             [username]
           )
-          
+          console.log('Username' , username )
+          console.log('Password' ,)
           console.log('--- Database Query Result ---')
           console.log('Raw rows from DB:', JSON.stringify(rows, null, 2)) 
           
@@ -38,7 +39,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (user && user.password) {
             const isPasswordCorrect = await bcrypt.compare(password, user.password)
             if (isPasswordCorrect) {
-              return { id: user.id.toString(), name: user.username, email: user.email }
+              return { id: user.user_id.toString(), name: user.username, email: user.email }
             }
           }
         } catch (error) {
