@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 CREATE TABLE IF NOT EXISTS accounts (
   user_id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(36) NOT NULL,
-  password VARCHAR(36) NOT NULL,
+  password VARCHAR(60) NOT NULL,
   email VARCHAR(36) NOT NULL,
   start_date DATE NOT NULL,
   status ENUM('active', 'cancel') DEFAULT 'active',
