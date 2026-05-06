@@ -136,11 +136,24 @@ export function ProfileScreen() {
           isOpen={openSection === "feedback"}
           onToggle={() => toggleSection("feedback")}
         />
+        
+        {/* Logout Button */}
+        <button
+          onClick={() => {
+            // Handle logout logic here
+            console.log("Logout clicked")
+          }}
+          className="w-full flex items-center gap-3 py-4 px-5 border-b border-border"
+        >
+          <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span className="text-red-500 font-medium">Logout</span>
+        </button>
       </section>
 
-      {/* Logout & Version */}
-      <section className="px-5 py-6 mt-4 flex items-center justify-between pb-28">
-        <button className="text-red-500 font-medium">Logout</button>
+      {/* Version */}
+      <section className="px-5 py-6 mt-4 flex items-center justify-end pb-28">
         <span className="text-muted-foreground text-sm">v1.7.3</span>
       </section>
     </div>
