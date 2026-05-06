@@ -113,16 +113,6 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
         />
       </div>
 
-      {!anyOAuth ? (
-        <p className="mt-4 max-w-sm text-center text-xs leading-relaxed text-neutral-600">
-          Configure OAuth client IDs in{' '}
-          <code className="rounded bg-neutral-100 px-1 py-0.5 text-[0.65rem] text-neutral-600">
-            .env.local
-          </code>{' '}
-          to enable the buttons above.
-        </p>
-      ) : null}
-
       <form
         onSubmit={onCredentialsSubmit}
         className="mt-10 flex w-full flex-col gap-5"
