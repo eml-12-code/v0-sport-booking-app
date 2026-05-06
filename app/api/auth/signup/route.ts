@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const currentActive = true
 
     const [result] = await pool.execute(
-      `INSERT INTO accounts (username, password, email, start_date, current_active, member_level) 
+      `INSERT INTO accounts (username, password, email, start_date, status, member_level) 
        VALUES (?, ?, ?, ?, ?, ?)`,
       [username, hashedPassword, email, startDate, currentActive, level]
     )
