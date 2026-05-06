@@ -30,7 +30,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             [username]
           )
           console.log('Username' , username )
-          console.log('Password' , password )
+          console.log('Password' ,)
           console.log('--- Database Query Result ---')
           console.log('Raw rows from DB:', JSON.stringify(rows, null, 2)) 
           
@@ -50,28 +50,50 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),  
   ],
+
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user, account }) {
-      // Your OAuth account creation logic remains here
+      // 1. Only process OAuth providers (Google, GitHub, etc.)
       if (account && account.provider !== 'credentials' && user.email) {
         try {
-          const baseUrl = process.env.NEXTAUTH_URL || `http://localhost:3000`
-          await fetch(`${baseUrl}/api/auth/oauth-account`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              username: user.name || user.email.split('@')[0],
-              email: user.email,
-              provider: account.provider,
-            }),
-          })
+          const username = user.name || user.email.split('@')[0];
+          const email = user.email;
+          const provider = account.provider;
+          const startDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+          const currentActive = true
+          const level = 1
+
+          console.log('account.provider', provider)
+
+          // 2. Check if user already exists
+          const [rows]: any = await pool.execute(
+            'SELECT user_id FROM accounts WHERE email = ? LIMIT 1',
+            [email]
+          );
+
+          // 3. If user doesn't exist, insert them directly into MySQL
+          if (rows.length === 0) {
+            console.log(`Creating new OAuth account for: ${email}`);
+            await pool.execute(
+              `INSERT INTO accounts (username, email, start_date, status, member_level,oauth_provider ) 
+              VALUES (?, ?, ?, ?, ?, ?)`,
+              [username, email, startDate, currentActive, level, provider ]  
+
+            );
+          } else {
+            console.log(`OAuth user already exists: ${email}`);
+            // Optional: Update the last_login timestamp here if you have that column
+          }
         } catch (error) {
-          console.error('OAuth sync error:', error)
+          // Log the error but don't block the user from logging in
+          console.error('Failed to sync OAuth user to database:', error);
         }
       }
-      return true
+      return true; // Return true to allow the user to sign in
     },
   }
-})
 
+
+
+})
