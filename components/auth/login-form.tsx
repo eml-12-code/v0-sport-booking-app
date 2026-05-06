@@ -6,6 +6,7 @@ import { signIn } from 'next-auth/react'
 import { Apple, Github, Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { SignupDialog } from './signup-dialog'
 
 export type LoginOAuthFlags = {
   google: boolean
@@ -26,6 +27,7 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
     'credentials' | OAuthId | null
   >(null)
   const [error, setError] = useState<string | null>(null)
+  const [signupOpen, setSignupOpen] = useState(false)
 
   const anyOAuth = oauth.google || oauth.github || oauth.apple
 
@@ -193,14 +195,16 @@ export function LoginForm({ oauth }: { oauth: LoginOAuthFlags }) {
 
       <p className="mt-12 text-center text-[14px] text-neutral-500">
         Don&apos;t have an account?{' '}
-        <a
-          href="#"
+        <button
+          type="button"
           className="font-medium text-neutral-900 underline-offset-4 hover:text-neutral-700 hover:underline"
-          onClick={(e) => e.preventDefault()}
+          onClick={() => setSignupOpen(true)}
         >
           Sign up
-        </a>
+        </button>
       </p>
+
+      <SignupDialog open={signupOpen} onOpenChange={setSignupOpen} />
     </div>
   )
 }
