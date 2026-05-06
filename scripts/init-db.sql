@@ -28,11 +28,11 @@ CREATE TABLE IF NOT EXISTS bookings (
   UNIQUE KEY unique_booking (class_id, user_id, status)
 );
 
--- Bookings table to store user bookings
+-- Bookings table to store accounts
 CREATE TABLE IF NOT EXISTS accounts (
   user_id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(36) NOT NULL,
-  password VARCHAR(60) NOT NULL,
+  password VARCHAR(90) NOT NULL DEFAULT '-',
   email VARCHAR(36) NOT NULL,
   start_date DATE NOT NULL,
   status ENUM('active', 'cancel') DEFAULT 'active',
