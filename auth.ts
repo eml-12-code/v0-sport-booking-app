@@ -4,6 +4,8 @@ import Credentials from 'next-auth/providers/credentials'
 import GitHub from 'next-auth/providers/github'
 import Google from 'next-auth/providers/google'
 import { NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs' // [ADD] For comparing hashed passwords
+import { db } from '@/lib/db' // [ADD] Import your database connection (adjust path as needed)
 
 import type { NextAuthConfig } from 'next-auth'
 
@@ -24,7 +26,8 @@ const providers: NextAuthConfig['providers'] = [
 
       console.log('GOOGLE_ID:', process.env.AUTH_GOOGLE_ID  )
       console.log('GOOGLE_SECRET:', process.env.AUTH_GOOGLE_SECRET)
-      
+
+      // 1. [DEMO CHECK] Check hardcoded demo credentials first
       const expectedUser =
         process.env.AUTH_DEMO_USERNAME ??
         (process.env.NODE_ENV !== 'production' ? 'demo' : '')
@@ -32,18 +35,46 @@ const providers: NextAuthConfig['providers'] = [
         process.env.AUTH_DEMO_PASSWORD ??
         (process.env.NODE_ENV !== 'production' ? 'demo' : '')
 
-      if (!expectedUser || !expectedPass) return null
-
-      if (username === expectedUser && password === expectedPass) {
+      if (expectedUser && expectedPass && username === expectedUser && password === expectedPass) {
         return {
           id: 'local-user',
           name: username,
           email: `${username}@users.local`,
         }
       }
-      return null
-    },
-  }),
+      
+      // 2. [DB CHECK] Look for the user in your MySQL database
+      try {
+        // Query the database for the user by username or email
+        // We select the 'password' hash to compare it below
+        const [rows]: any = await db.execute(
+          'SELECT id, username, email, password FROM accounts WHERE username = ? OR email = ? LIMIT 1',
+          [username, username]
+        )
+        
+        const user = rows[0] // Get the first user found
+
+         if (user && user.password) {
+          // Compare the provided plain-text password with the 60-char bcrypt hash in DB
+          const isPasswordCorrect = await bcrypt.compare(password, user.password)
+
+          if (isPasswordCorrect) {
+            return {
+              id: user.id.toString(), // Convert ID to string for Auth.js compatibility
+              name: user.username,
+              email: user.email,
+            }
+          }
+        }
+      } catch (error) {
+        // Log the error (this will show up in your 'app-1' docker logs)
+        console.error('Login Database Error:', error)
+        return null
+      }
+      return null // If no matches in Demo or DB
+          },
+  }),  
+  
 ]
 
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
