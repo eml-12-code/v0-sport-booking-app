@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { toggleBooking } from "@/app/actions/booking"
-import { useTransition } from "react"
+import { useState, useTransition } from "react"
 
 export interface ClassItem {
   id: string
@@ -72,13 +72,17 @@ const classIcons: Record<string, JSX.Element> = {
 
 export function ClassCard({ classItem, isBooked, userId, onBookingChange }: ClassCardProps) {
   const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const icon = classIcons[classItem.name] || classIcons.HIIT
 
   const handleBook = () => {
+    setError(null) // Clear previous error
     startTransition(async () => {
       const result = await toggleBooking(classItem.id, userId)
       if (result.success && result.isBooked !== undefined) {
         onBookingChange(classItem.id, result.isBooked)
+      } else if (!result.success) {
+        setError(result.message)
       }
     })
   }
@@ -124,6 +128,11 @@ export function ClassCard({ classItem, isBooked, userId, onBookingChange }: Clas
         >
           {isPending ? "Processing..." : isBooked ? "Cancel Booking" : "Book Now"}
         </Button>
+        {error && (
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400 text-center font-medium">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   )

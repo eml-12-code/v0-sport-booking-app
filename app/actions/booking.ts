@@ -158,13 +158,14 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
 
     // 3. Select with FOR UPDATE (Database-level lock)
     const [classRows] = await connection.execute<RowDataPacket[]>(
-      `SELECT date, location, spots FROM classes WHERE id = ? FOR UPDATE`,
+      `SELECT date, location, spots, token_cost FROM classes WHERE id = ? FOR UPDATE`,
       [classId]
     );
 
     if (classRows.length === 0) throw new Error('Class not found');
 
     const classInfo = classRows[0];
+    const tokenCost = Number(classInfo.token_cost) || 1;
 
     // Check if the user already has a confirmed booking
     
@@ -183,7 +184,28 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
         [classId, userId]
       );
       await connection.execute(`UPDATE classes SET spots = spots + 1 WHERE id = ?`, [classId]);
-      result = { success: true, message: 'Booking cancelled', isBooked: false };
+
+      // Refund tokens to user account
+      await connection.execute(
+        `UPDATE accounts SET token_remain = token_remain + ? WHERE email = ?`,
+        [tokenCost, userId]
+      );
+
+      // Get updated balance for the transaction log
+      const [balanceRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT token_remain FROM accounts WHERE email = ?`,
+        [userId]
+      );
+      const balanceAfterCancel = balanceRows.length > 0 ? Number(balanceRows[0].token_remain) : 0;
+
+      // Log the cancellation
+      await connection.execute(
+        `INSERT INTO transactions_log (user_id, class_id, action, token_amount, token_balance_after)
+         VALUES (?, ?, 'cancel', ?, ?)`,
+        [userId, classId, -tokenCost, balanceAfterCancel]
+      );
+
+      result = { success: true, message: `Booking cancelled (+${tokenCost} token${tokenCost !== 1 ? 's' : ''} refunded)`, isBooked: false };
     } else {
     
       // --- LOGIC: NEW BOOKING ---
@@ -191,13 +213,46 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
         throw new Error('No spots available');
       }
 
+      // Check user token balance (lock row for atomic update)
+      const [accountRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT token_remain FROM accounts WHERE email = ? FOR UPDATE`,
+        [userId]
+      );
+
+      if (accountRows.length === 0) {
+        throw new Error('Account not found. Please contact support.');
+      }
+
+      const currentTokens = Number(accountRows[0].token_remain) || 0;
+
+      if (currentTokens < tokenCost) {
+        throw new Error(`Insufficient tokens. This class costs ${tokenCost} token${tokenCost !== 1 ? 's' : ''}, but you only have ${currentTokens}.`);
+      }
+
+      // Create booking
       await connection.execute(
         `INSERT INTO bookings (class_id, user_id, status) VALUES (?, ?, 'confirmed')
          ON DUPLICATE KEY UPDATE status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
         [classId, userId]
       );
       await connection.execute(`UPDATE classes SET spots = spots - 1 WHERE id = ?`, [classId]);
-      result = { success: true, message: 'Class booked successfully', isBooked: true };
+
+      // Deduct tokens from user account
+      await connection.execute(
+        `UPDATE accounts SET token_remain = token_remain - ? WHERE email = ?`,
+        [tokenCost, userId]
+      );
+
+      const newBalance = currentTokens - tokenCost;
+
+      // Log the booking transaction
+      await connection.execute(
+        `INSERT INTO transactions_log (user_id, class_id, action, token_amount, token_balance_after)
+         VALUES (?, ?, 'book', ?, ?)`,
+        [userId, classId, tokenCost, newBalance]
+      );
+
+      result = { success: true, message: `Class booked successfully (-${tokenCost} token${tokenCost !== 1 ? 's' : ''})`, isBooked: true };
     }
 
 

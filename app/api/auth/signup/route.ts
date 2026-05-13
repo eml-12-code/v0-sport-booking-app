@@ -57,8 +57,31 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     )
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Signup error:', error)
+
+    // Handle MySQL duplicate entry error (from UNIQUE constraints)
+    const mysqlError = error as { code?: string; message?: string }
+    if (mysqlError?.code === 'ER_DUP_ENTRY') {
+      const message = mysqlError.message || ''
+      if (message.includes('uq_accounts_email')) {
+        return NextResponse.json(
+          { error: 'This email is already registered. Please log in instead.' },
+          { status: 409 }
+        )
+      }
+      if (message.includes('uq_accounts_username')) {
+        return NextResponse.json(
+          { error: 'This username is already taken. Please choose another.' },
+          { status: 409 }
+        )
+      }
+      return NextResponse.json(
+        { error: 'Username or email already exists. Please log in instead.' },
+        { status: 409 }
+      )
+    }
+
     return NextResponse.json(
       { error: 'Failed to create account' },
       { status: 500 }
