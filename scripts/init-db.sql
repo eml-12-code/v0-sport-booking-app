@@ -4,7 +4,7 @@ USE sport_booking;
 
 -- Classes table to store available classes
 CREATE TABLE IF NOT EXISTS classes (
-  id VARCHAR(36) PRIMARY KEY,
+  class_id VARCHAR(36) PRIMARY KEY,
   time TIME NOT NULL,
   name VARCHAR(100) NOT NULL,
   room VARCHAR(50) NOT NULL,
@@ -19,25 +19,36 @@ CREATE TABLE IF NOT EXISTS classes (
 
 -- Bookings table to store user bookings
 CREATE TABLE IF NOT EXISTS bookings (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  booking_id INT AUTO_INCREMENT PRIMARY KEY,
   class_id VARCHAR(36) NOT NULL,
   user_id VARCHAR(100) NOT NULL DEFAULT 'anonymous',
   booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  status ENUM('confirmed', 'cancelled') DEFAULT 'confirmed',
+  booking_status ENUM('confirmed', 'cancelled') DEFAULT 'confirmed',
   FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_booking (class_id, user_id, status)
+  UNIQUE KEY unique_booking (class_id, user_id, booking_status)
 );
 
 -- Bookings table to store accounts
 CREATE TABLE IF NOT EXISTS accounts (
-  user_id INT AUTO_INCREMENT PRIMARY KEY,
+  member_id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(36) NOT NULL,
   password VARCHAR(90) NOT NULL DEFAULT '-',
   email VARCHAR(36) NOT NULL,
   start_date DATE NOT NULL,
   status ENUM('active', 'cancel') DEFAULT 'active',
   member_level ENUM('1', '2', '3', '4', '5') DEFAULT '1',
+  token_remain INT NOT NULL DEFAULT 0,
   oauth_provider VARCHAR(36) NOT NULL DEFAULT 'email'
+);
+
+-- Contracts table to store contracts
+CREATE TABLE IF NOT EXISTS contracts (
+   contract_id INT AUTO_INCREMENT PRIMARY KEY,
+   member_id INT,
+   contract_status ENUM('active', 'cancel') DEFAULT 'active',
+   reminder_token INT NOT NULL DEFAULT 0,
+   start_date DATE NOT NULL,
+   expiry_date DATE NOT NULL
 );
 
 -- Insert sample classes for today
