@@ -59,8 +59,7 @@ docker ps
 docker exec -it <XXXX> mysql -u root =P 
 USE sport_booking;
 show tables;  
-```
-```
+
 
 
 
