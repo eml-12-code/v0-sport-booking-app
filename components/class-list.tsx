@@ -91,9 +91,9 @@ export function ClassList({ selectedDate, selectedLocation }: ClassListProps) {
       <div className="flex flex-col gap-3">
         {classes.map((classItem) => (
           <ClassCard
-            key={classItem.id}
+            key={classItem.classId}
             classItem={classItem}
-            isBooked={bookedClasses.includes(classItem.id)}
+            isBooked={bookedClasses.includes(classItem.classId)}
             userId={userId}
             onBookingChange={handleBookingChange}
           />

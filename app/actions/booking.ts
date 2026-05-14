@@ -75,7 +75,7 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
     // 2. If not in Redis, fetch from MySQL
     console.log('Redis Cache Miss. Fetching from MySQL...')
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT class_id, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
+      `SELECT class_id AS classId, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
        FROM classes 
        WHERE date = ? AND location = ?
        ORDER BY time`,

@@ -6,7 +6,7 @@ import { toggleBooking } from "@/app/actions/booking"
 import { useState, useTransition } from "react"
 
 export interface ClassItem {
-  id: string
+  classId: string
   time: string
   name: string
   room: string
@@ -78,9 +78,9 @@ export function ClassCard({ classItem, isBooked, userId, onBookingChange }: Clas
   const handleBook = () => {
     setError(null) // Clear previous error
     startTransition(async () => {
-      const result = await toggleBooking(classItem.id, userId)
+      const result = await toggleBooking(classItem.classId, userId)
       if (result.success && result.isBooked !== undefined) {
-        onBookingChange(classItem.id, result.isBooked)
+        onBookingChange(classItem.classId, result.isBooked)
       } else if (!result.success) {
         setError(result.message)
       }
