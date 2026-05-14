@@ -23,7 +23,7 @@ const redlock = new Redlock(
 // ---------
 
 export interface ClassItem {
-  id: string
+  classId: string
   time: string
   name: string
   room: string
@@ -40,7 +40,7 @@ export interface BookingResult {
 }
 
 export interface BookedClassItem {
-  id: string
+  bookingId: string
   classId: string
   className: string
   time: string
@@ -65,19 +65,24 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
     // 1. Try to get data from Redis
     const cachedData = await redis.get(cacheKey)
     if (cachedData) {
+
       console.log('Redis Cache Hit for:', cacheKey)
+      console.table(JSON.parse(cachedData));
+      
       return JSON.parse(cachedData)
     }
 
     // 2. If not in Redis, fetch from MySQL
     console.log('Redis Cache Miss. Fetching from MySQL...')
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
+      `SELECT class_id, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
        FROM classes 
        WHERE date = ? AND location = ?
        ORDER BY time`,
       [formattedDate, location]
     )
+
+    console.table(rows);
 
     const classes = rows as ClassItem[]
 
@@ -95,6 +100,7 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
   }
 }
 
+
 // Get user's booked classes
 export async function getBookedClasses(
   userId: string = 'anonymous',
@@ -103,7 +109,7 @@ export async function getBookedClasses(
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT 
-        b.id, 
+        b.booking_id, 
         b.class_id as classId, 
         c.name as className, 
         DATE_FORMAT(c.time, '%l:%i %p') as time, 
@@ -113,13 +119,16 @@ export async function getBookedClasses(
         c.location,
         c.spots
        FROM bookings b
-       JOIN classes c ON b.class_id = c.id
-       WHERE b.user_id = ? AND b.status = 'confirmed'
+       JOIN classes c ON b.class_id = c.class_id
+       WHERE b.member_id = ? AND b.booking_status = 'confirmed'
        ORDER BY c.date ASC, c.time ASC`,
       [userId]    )
-    
+
+    console.log("Total Bookings Found:", rows.length , " for " , userId );
+    console.table(rows); 
+
     return rows.map((row) => ({
-      id: String(row.id),
+      id: String(row.bookingId),
       classId: String(row.classId),
       className: String(row.className),
       time: String(row.time),
@@ -141,11 +150,16 @@ export async function getBookedClasses(
 
 export async function toggleBooking(classId: string, userId: string = 'anonymous'): Promise<BookingResult> {
   const lockKey = `locks:class:${classId}`;
+
+  console.log ( "toggleBooking -> ", lockKey )
   
   // 1. Acquire Distributed Lock (valid for 5000ms to prevent deadlocks)
   let lock;
   try {
     lock = await redlock.acquire([lockKey], 5000);
+
+    console.log ("Row Lock ", classId )   
+
   } catch (err) {
     return { success: false, message: 'System busy, please try again.' };
   }
@@ -158,7 +172,7 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
 
     // 3. Select with FOR UPDATE (Database-level lock)
     const [classRows] = await connection.execute<RowDataPacket[]>(
-      `SELECT date, location, spots, token_cost FROM classes WHERE id = ? FOR UPDATE`,
+      `SELECT date, location, spots, token_cost FROM classes WHERE class_id = ? FOR UPDATE`,
       [classId]
     );
 
@@ -170,7 +184,7 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
     // Check if the user already has a confirmed booking
     
     const [existing] = await connection.execute<RowDataPacket[]>(
-      `SELECT id FROM bookings WHERE class_id = ? AND user_id = ? AND status = 'confirmed' FOR UPDATE`,
+      `SELECT booking_id FROM bookings WHERE class_id = ? AND user_id = ? AND status = 'confirmed' FOR UPDATE`,
       [classId, userId]
     );
 
@@ -200,7 +214,7 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
 
       // Log the cancellation
       await connection.execute(
-        `INSERT INTO transactions_log (user_id, class_id, action, token_amount, token_balance_after)
+        `INSERT INTO transactions_log (member_id, class_id, action, token_amount, token_balance_after)
          VALUES (?, ?, 'cancel', ?, ?)`,
         [userId, classId, -tokenCost, balanceAfterCancel]
       );

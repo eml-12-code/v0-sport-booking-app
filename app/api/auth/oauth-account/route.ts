@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
     // Check if account already exists
     const [existingUsers] = await pool.execute(
-      'SELECT id FROM accounts WHERE email = ?',
+      'SELECT member_id FROM accounts WHERE email = ?',
       [email]
     )
 

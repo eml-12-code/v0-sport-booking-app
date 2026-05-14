@@ -3,10 +3,12 @@
 import pool from '@/lib/db'
 import { RowDataPacket } from 'mysql2'
 import * as XLSX from 'xlsx'
-import { randomUUID } from 'crypto'
+// import { randomUUID } from 'crypto'
+import crypto from 'crypto';
+
 
 // Required columns in the uploaded Excel file
-const REQUIRED_COLUMNS = ['name', 'time', 'date', 'room', 'instructor', 'duration', 'spots', 'color', 'location'] as const
+const REQUIRED_COLUMNS = ['name', 'time', 'date', 'room', 'instructor', 'duration', 'class_size', 'color', 'location'] as const
 
 const VALID_COLORS = ['blue', 'pink', 'yellow', 'green'] as const
 
@@ -25,7 +27,7 @@ export interface ParsedRow {
   room: string
   instructor: string
   duration: string
-  spots: number
+  class_size: number
   color: string
   location: string
   token_cost: number
@@ -94,7 +96,7 @@ export async function uploadClassSchedule(formData: FormData): Promise<UploadRes
     const room = String(row.room || '').trim()
     const instructor = String(row.instructor || '').trim()
     const duration = String(row.duration || '').trim()
-    const spots = Number(row.spots)
+    const class_size = Number(row.class_size)
     const color = String(row.color || '').trim().toLowerCase()
     const location = String(row.location || '').trim()
     const tokenCost = row.token_cost !== undefined ? Number(row.token_cost) : 1.0
@@ -105,8 +107,8 @@ export async function uploadClassSchedule(formData: FormData): Promise<UploadRes
       continue
     }
 
-    if (isNaN(spots) || spots < 0) {
-      errors.push(`Row ${rowNum}: Invalid spots value "${row.spots}"`)
+    if (isNaN(class_size) || class_size < 0) {
+      errors.push(`Row ${rowNum}: Invalid class size value "${row.class_size}"`)
       continue
     }
 
@@ -114,6 +116,8 @@ export async function uploadClassSchedule(formData: FormData): Promise<UploadRes
       errors.push(`Row ${rowNum}: Invalid color "${color}". Must be one of: ${VALID_COLORS.join(', ')}`)
       continue
     }
+
+    
 
     if (isNaN(tokenCost) || tokenCost < 0) {
       errors.push(`Row ${rowNum}: Invalid token_cost "${row.token_cost}"`)
@@ -178,7 +182,7 @@ export async function uploadClassSchedule(formData: FormData): Promise<UploadRes
       room,
       instructor,
       duration,
-      spots,
+      class_size,
       color,
       location,
       token_cost: tokenCost,
@@ -189,7 +193,7 @@ export async function uploadClassSchedule(formData: FormData): Promise<UploadRes
     return { success: false, inserted: 0, updated: 0, total: rawRows.length, errors }
   }
 
-  // Upsert into database
+  // Insert into database
   let inserted = 0
   let updated = 0
   const connection = await pool.getConnection()
@@ -200,36 +204,46 @@ export async function uploadClassSchedule(formData: FormData): Promise<UploadRes
     for (const row of parsedRows) {
       // Check if a class already exists with same (date, time, location, room)
       const [existing] = await connection.execute<RowDataPacket[]>(
-        `SELECT id FROM classes WHERE date = ? AND time = ? AND location = ? AND room = ?`,
+        `SELECT class_id FROM classes WHERE date = ? AND time = ? AND location = ? AND room = ?`,
         [row.date, row.time, row.location, row.room]
       )
-
+      
       if (existing.length > 0) {
         // UPDATE existing row
+
+        console.log( "Update " , existing[0].class_id )
         await connection.execute(
           `UPDATE classes 
-           SET name = ?, instructor = ?, duration = ?, spots = ?, color = ?, token_cost = ?
-           WHERE id = ?`,
-          [row.name, row.instructor, row.duration, row.spots, row.color, row.token_cost, existing[0].id]
+           SET name = ?, instructor = ?, duration = ?, spots = ?, color = ?, token_cost = ?, class_size = ?
+           WHERE class_id = ?`,
+          [row.name, row.instructor, row.duration, row.class_size, row.color, row.token_cost, row.class_size, existing[0].class_id]
         )
         updated++
       } else {
-        // INSERT new row with auto-generated UUID
-        const id = randomUUID()
+
+        // 1. Generate a 6-character hex string
+        const id = crypto.randomBytes(4).toString('hex');
+
+        // 2. Split into two groups of 4
+        const groupedHex = `${id.substring(0, 4)}-${id.substring(4)}`;
+
         await connection.execute(
-          `INSERT INTO classes (id, time, name, room, instructor, duration, spots, color, date, location, token_cost)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [id, row.time, row.name, row.room, row.instructor, row.duration, row.spots, row.color, row.date, row.location, row.token_cost]
+          `INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, color, date, location, token_cost,  class_size, created_at)
+                        VALUES (?       , ?   ,    ?,    ?,          ?,        ?,     ?,     ?,    ?,        ?,          ?,  ?,   NOW()     )`,
+          [groupedHex, row.time, row.name, row.room, row.instructor, row.duration, row.class_size, row.color, row.date, row.location,  row.class_size,row.token_cost ]
         )
+        console.log( "Insert " , groupedHex )
         inserted++
       }
+
     }
 
     await connection.commit()
   } catch (error) {
+    console.log ( "Error ", error.message )
     await connection.rollback()
     const msg = error instanceof Error ? error.message : 'Unknown database error'
-    errors.push(`Database error: ${msg}`)
+    errors.push(`Database error:  ${msg}`)
     return { success: false, inserted: 0, updated: 0, total: rawRows.length, errors }
   } finally {
     connection.release()

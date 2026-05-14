@@ -19,7 +19,7 @@ export async function getAccountProfile(): Promise<AccountProfile | null> {
   if (!session?.user?.email) return null
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_id, username, email, token_remain, expiry_date, member_level, start_date
+    `SELECT member_id, username, email, token_remain, expiry_date, member_level, start_date
      FROM accounts WHERE email = ? LIMIT 1`,
     [session.user.email]
   )

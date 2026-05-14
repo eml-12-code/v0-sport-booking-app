@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     // Check if username or email already exists
     const [existingUsers] = await pool.execute(
-      'SELECT user_id FROM accounts WHERE username = ? OR email = ?',
+      'SELECT member_id FROM accounts WHERE username = ? OR email = ?',
       [username, email]
     )
 

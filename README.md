@@ -49,4 +49,18 @@ docker compose up --build
 ```bash
 docker build -t sport-booking-app .
 docker run -p 3000:3000 sport-booking-app
+
+
+# MySQL 
+
+
+```bash
+docker ps
+docker exec -it <XXXX> mysql -u root =P 
+USE sport_booking;
+show tables;  
 ```
+```
+
+
+

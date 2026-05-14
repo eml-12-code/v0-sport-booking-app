@@ -158,7 +158,7 @@ function UploadScheduleSection({ onBack }: { onBack: () => void }) {
           Upload an .xlsx, .xls, or .csv file with the following columns:
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {['name', 'time', 'date', 'room', 'instructor', 'duration', 'spots', 'color', 'location'].map((col) => (
+          {['name', 'time', 'date', 'room', 'instructor', 'duration', 'class_size', 'color', 'location'].map((col) => (
             <span
               key={col}
               className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded"
@@ -167,7 +167,7 @@ function UploadScheduleSection({ onBack }: { onBack: () => void }) {
             </span>
           ))}
           <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs font-mono rounded">
-            token_cost (optional)
+            token_cost
           </span>
         </div>
         <p className="text-xs text-muted-foreground mt-3">
