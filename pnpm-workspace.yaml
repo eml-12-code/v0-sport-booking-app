@@ -1,2 +1,8 @@
-allowBuilds:
-  sharp: false
+# pnpm-workspace.yaml
+packages:
+  - "."
+
+onlyBuiltDependencies:
+  - sharp
+
+  

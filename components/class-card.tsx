@@ -73,14 +73,18 @@ const classIcons: Record<string, JSX.Element> = {
 export function ClassCard({ classItem, isBooked, userId, onBookingChange }: ClassCardProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const icon = classIcons[classItem.name] || classIcons.HIIT
+  const icon = classIcons[ClassItem.name] || classIcons.HIIT
+
+
+  console.log ( "ClassCard   ")
 
   const handleBook = () => {
     setError(null) // Clear previous error
     startTransition(async () => {
-      const result = await toggleBooking(classItem.classId, userId)
+      console.log ( "ClassCard -->" , ClassItem.classId )
+      const result = await toggleBooking(ClassItem.classId, userId)
       if (result.success && result.isBooked !== undefined) {
-        onBookingChange(classItem.classId, result.isBooked)
+        onBookingChange(ClassItem.classId, result.isBooked)
       } else if (!result.success) {
         setError(result.message)
       }

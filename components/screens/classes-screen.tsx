@@ -25,6 +25,7 @@ export function ClassesScreen() {
     session?.user?.name?.trim() ||
     session?.user?.email?.split("@")[0]?.trim() ||
     ""
+    console.log ( "ClassesScreen --> ")
 
   return (
     <>
