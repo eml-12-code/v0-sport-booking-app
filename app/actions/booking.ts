@@ -109,10 +109,10 @@ export async function getBookedClasses(
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT 
-        b.booking_id, 
-        b.class_id as classId, 
-        c.name as className, 
-        DATE_FORMAT(c.time, '%l:%i %p') as time, 
+        b.booking_id AS bookingId, 
+        b.class_id AS classId, 
+        c.name AS className, 
+        DATE_FORMAT(c.time, '%l:%i %p') AS time, 
         c.room, 
         c.instructor, 
         c.date, 
@@ -120,15 +120,16 @@ export async function getBookedClasses(
         c.spots
        FROM bookings b
        JOIN classes c ON b.class_id = c.class_id
-       WHERE b.member_id = ? AND b.booking_status = 'confirmed'
+       WHERE b.user_id = ? AND b.status = 'confirmed'
        ORDER BY c.date ASC, c.time ASC`,
-      [userId]    )
+      [userId]
+    )
 
     console.log("Total Bookings Found:", rows.length , " for " , userId );
     console.table(rows); 
 
     return rows.map((row) => ({
-      id: String(row.bookingId),
+      bookingId: String(row.bookingId),
       classId: String(row.classId),
       className: String(row.className),
       time: String(row.time),
@@ -197,7 +198,7 @@ export async function toggleBooking(classId: string, userId: string = 'anonymous
         `UPDATE bookings SET status = 'cancelled' WHERE class_id = ? AND user_id = ? AND status = 'confirmed'`,
         [classId, userId]
       );
-      await connection.execute(`UPDATE classes SET spots = spots + 1 WHERE id = ?`, [classId]);
+      await connection.execute(`UPDATE classes SET spots = spots + 1 WHERE class_id = ?`, [classId]);
 
       // Refund tokens to user account
       await connection.execute(
