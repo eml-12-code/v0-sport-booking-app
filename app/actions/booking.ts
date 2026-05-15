@@ -128,6 +128,7 @@ export async function getBookedClasses(
     console.table(rows); 
 
     return rows.map((row) => ({
+      
       id: String(row.bookingId),
       classId: String(row.classId),
       className: String(row.className),
