@@ -60,6 +60,32 @@ docker exec -it <XXXX> mysql -u root =P
 USE sport_booking;
 show tables;  
 
+```
 
+````
+┌────────────────────────────────────────────────────────┐
+│  1. THE DATA MASTER (Parent Container)                 │
+│     File: classes-screen.tsx (ClassesScreen)           │
+│     • Manages global states (selectedDate, memberId)   │
+│     • Connects directly to backend Server Actions      │
+└──────────────────────────┬─────────────────────────────┘
+                           │  Passes Data Down via Props
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│  2. THE STRUCTURAL GRID (Child / Mid-Level Component)  │
+│     File: class-list.tsx (ClassList)                   │
+│     • Receives arrays; pure visual wrapper             │
+│     • Loops data packets cleanly via .map() entries    │
+└──────────────────────────┬─────────────────────────────┘
+                           │  Passes Unit Attributes
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│  3. THE INTERACTIVE LEAF (Grandchild Component)        │
+│     File: class-card.tsx (ClassCard)                   │
+│     • Renders individual interface button layouts      │
+│     • Fires user clicks back UP through event chains   │
+└────────────────────────────────────────────────────────┘
+
+```
 
 

@@ -17,14 +17,17 @@ export async function getMemberContracts(): Promise<Contract[]> {
   const session = await auth()
   if (!session?.user?.email) return []
 
-  console.log("getMemberContracts") 
-  console.log( session.user.email ) 
+  console.log("getMemberContracts" , "email" , session.user.email ) 
 
   // Get member_id from accounts by email
   const [accountRows] = await pool.execute<RowDataPacket[]>(
     'SELECT member_id FROM accounts WHERE email = ? LIMIT 1',
     [session.user.email]
   )
+
+  console.log("From accounts : ")
+  console.table(accountRows)
+
   if (!accountRows.length) return []
 
   const memberId = accountRows[0].member_id
@@ -35,6 +38,7 @@ export async function getMemberContracts(): Promise<Contract[]> {
     [memberId]
   )
   console.log("Exit->getMemberContracts") 
+  console.table(rows)
 
   return rows.map((row) => ({
     id: row.id,

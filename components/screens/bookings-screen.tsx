@@ -46,10 +46,24 @@ export function BookingsScreen() {
     session?.user?.name?.trim() ||
     "anonymous"
 
+  console.log ( "--------------userId " , userId )
+
   useEffect(() => {
     async function fetchBookings() {
       try {
-        const data = await getBookedClasses(userId)
+
+        console.log ( "--------------userId " , userId )
+
+        // ---------
+        // Fetch the user's database profile securely from the server
+        const profile = await getAccountProfile()
+
+        // Extract the numeric memberId, default to 0 if not logged in
+        const memberId = profile ? profile.memberId : 0
+
+        // ---------
+        const data = await getBookedClasses(memberId)
+
         setBookings(data.filter(isBookingItem))
       } catch (error) {
         console.error("Error fetching bookings:", error)

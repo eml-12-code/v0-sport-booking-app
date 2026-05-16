@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { getBookedClasses } from "@/app/actions/booking"
+import { getAccountProfile } from '@/app/actions/account' 
 import { useSession } from "next-auth/react"
 
 interface BookingItem {
@@ -28,7 +29,19 @@ export function HomeScreen() {
   useEffect(() => {
     async function fetchTodayBookings() {
       try {
-        const bookings = await getBookedClasses(userId)
+
+        console.log ( "--------------userId " , userId )
+
+        // ---------
+        // Fetch the user's database profile securely from the server
+        const profile = await getAccountProfile()
+
+        // Extract the numeric memberId, default to 0 if not logged in
+        const memberId = profile ? profile.memberId : 0
+
+        // ---------
+        const bookings = await getBookedClasses(memberId)
+        
         // Filter for today's bookings
         const today = new Date().toISOString().split('T')[0]
         const todayOnly = bookings.filter((b: BookingItem) => b.date === today)

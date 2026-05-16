@@ -19,7 +19,7 @@ export interface ClassItem {
 interface ClassCardProps {
   classItem: ClassItem
   isBooked: boolean
-  userId: string
+  memberId: number 
   onBookingChange: (classId: string, isBooked: boolean) => void
 }
 
@@ -70,7 +70,7 @@ const classIcons: Record<string, JSX.Element> = {
   ),
 }
 
-export function ClassCard({ classItem, isBooked, userId, onBookingChange }: ClassCardProps) {
+export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: ClassCardProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const icon = classIcons[classItem.name] || classIcons.HIIT
@@ -78,7 +78,9 @@ export function ClassCard({ classItem, isBooked, userId, onBookingChange }: Clas
   const handleBook = () => {
     setError(null) // Clear previous error
     startTransition(async () => {
-      const result = await toggleBooking(classItem.classId, userId)
+
+      console.log ( " ClassCard ->", memberId ,"<")
+      const result = await toggleBooking(classItem.classId, memberId)
       if (result.success && result.isBooked !== undefined) {
         onBookingChange(classItem.classId, result.isBooked)
       } else if (!result.success) {

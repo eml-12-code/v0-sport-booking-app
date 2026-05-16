@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react" 
 import { DatePicker } from "@/components/date-picker"
 import { ClassList } from "@/components/class-list"
-import { useSession } from "next-auth/react"
+import { useSession } from "next-auth/react"                // holds loading state
+import { getAccountProfile } from "@/app/actions/account"
+import { getClasses, getBookedClasses } from "@/app/actions/booking"
 
 const locations = ["Hong Kong", "Kowloon", "Macau"] as const
 
@@ -19,7 +21,56 @@ export function ClassesScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedLocation, setSelectedLocation] = useState<string>(locations[0])
   const [isLocationOpen, setIsLocationOpen] = useState(false)
-  const { data: session } = useSession()
+
+  //  CHANGE 2: Added state variables to hold data fetched from the database
+  const { data : session , status } = useSession
+
+  const [classes, setClasses] = useState([])
+  const [bookedClasses, setBookedClasses] = useState<string[]>([])
+  const [memberId, setMemberId] = useState<number>(0)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // CHANGE 3: Added an orchestrator function to sync profiles and classes
+  const fetchData = useCallback(async () => {
+
+    if ( status == 'Loading') return;
+
+    setIsLoading(true)
+    try {
+      const profile = await getAccountProfile()
+      const currentMemberId = profile ? profile.memberId : 0
+      setMemberId(currentMemberId)
+
+      const [classesData, bookedData] = await Promise.all([
+        getClasses(selectedDate || new Date(), selectedLocation),
+        getBookedClasses(currentMemberId)
+      ])
+
+      setClasses(classesData)
+      setBookedClasses(bookedData.map((b) => b.classId))
+    } catch (error) {
+      console.error("Failed to load class content arrays:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedDate, selectedLocation, status])
+
+
+  // listens to auth shifts and re-queries automatically
+
+  useEffect (() => {
+    fetchData()
+  }, [fetchData, status ])
+
+
+  // CHANGE 5: Added an state array handler to reactively toggle card bookings
+  const handleBookingChange = (classId: string, isBooked: boolean) => {
+    setBookedClasses((prev) =>
+      isBooked ? [...prev, classId] : prev.filter((id) => id !== classId)
+    )
+  }
+
+// =======
 
   const userDisplayName =
     session?.user?.name?.trim() ||
@@ -89,9 +140,22 @@ export function ClassesScreen() {
       </header>
 
       {/* Main Content */}
+
       <main className="px-5 pb-28">
-        <ClassList selectedDate={selectedDate} selectedLocation={selectedLocation} />
+
+        {/* CHANGE 6: Replaced old parameters with your complete set of shared data variables */}
+        {isLoading ? (
+          <div className="text-center py-10 text-muted-foreground text-sm">Loading classes...</div>
+        ) : (
+          <ClassList 
+            classes={classes}
+            bookedClasses={bookedClasses}
+            memberId={memberId}
+            handleBookingChange={handleBookingChange} 
+          />
+        )}
       </main>
+
     </>
   )
 }

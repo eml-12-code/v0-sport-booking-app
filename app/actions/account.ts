@@ -14,8 +14,11 @@ export interface AccountProfile {
   startDate: string
 }
 
+// -------
+
 export async function getAccountProfile(): Promise<AccountProfile | null> {
   const session = await auth()
+
   if (!session?.user?.email) return null
 
   const [rows] = await pool.execute<RowDataPacket[]>(
@@ -28,7 +31,7 @@ export async function getAccountProfile(): Promise<AccountProfile | null> {
 
   const row = rows[0]
   return {
-    memberId: row.user_id,
+    memberId: row.member_id,
     username: row.username,
     email: row.email,
     tokenRemain: Number(row.token_remain),

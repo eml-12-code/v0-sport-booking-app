@@ -1,65 +1,28 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { ClassCard, type ClassItem } from "@/components/class-card"
-import { getClasses, getBookedClasses } from "@/app/actions/booking"
-import { useSession } from "next-auth/react"
+import { ClassCard } from "@/components/class-card"
 
-interface ClassListProps {
-  selectedDate: Date
-  selectedLocation: string
+interface ClassItem {
+  classId: string
+  time: string
+  name: string
+  room: string
+  instructor: string
+  duration: string
+  spots: number
+  color: 'blue' | 'pink' | 'yellow' | 'green'
 }
 
-export function ClassList({ selectedDate, selectedLocation }: ClassListProps) {
-  const [classes, setClasses] = useState<ClassItem[]>([])
-  const [bookedClasses, setBookedClasses] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const { data: session } = useSession()
+interface ClassListProps {
+  classes: ClassItem[]
+  bookedClasses: string[]
+  memberId: number
+  handleBookingChange: (classId: string, isBooked: boolean) => void
+}
 
-  const userId =
-    session?.user?.email?.trim() ||
-    session?.user?.name?.trim() ||
-    "anonymous"
-
-  const fetchData = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const [classesData, bookedData] = await Promise.all([
-        getClasses(selectedDate, selectedLocation),
-        getBookedClasses(userId)
-      ])
-      setClasses(classesData)
-      setBookedClasses(bookedData.map((booking) => booking.classId))
-    } catch (error) {
-      console.error("Error fetching data:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [selectedDate, selectedLocation, userId])
-
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
-
-  const handleBookingChange = (classId: string, isBooked: boolean) => {
-    if (isBooked) {
-      setBookedClasses((prev) => [...prev, classId])
-    } else {
-      setBookedClasses((prev) => prev.filter((id) => id !== classId))
-    }
-    // Refresh to get updated spots
-    fetchData()
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-2xl p-4 bg-muted animate-pulse h-32" />
-        ))}
-      </div>
-    )
-  }
+export function ClassList({ classes, bookedClasses, memberId, handleBookingChange }: ClassListProps) {
+  
+  console.log("🎨 [UI RENDER] Array items length arriving to ClassList:", classes?.length)
 
   if (classes.length === 0) {
     return (
@@ -94,7 +57,7 @@ export function ClassList({ selectedDate, selectedLocation }: ClassListProps) {
             key={classItem.classId}
             classItem={classItem}
             isBooked={bookedClasses.includes(classItem.classId)}
-            userId={userId}
+            memberId={memberId} 
             onBookingChange={handleBookingChange}
           />
         ))}
@@ -102,3 +65,4 @@ export function ClassList({ selectedDate, selectedLocation }: ClassListProps) {
     </>
   )
 }
+
