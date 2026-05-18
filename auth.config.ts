@@ -9,7 +9,17 @@ export const authConfig = {
   trustHost: true,
   providers: [
     // OAuth providers are generally Edge-compatible
-    Google({ clientId: process.env.AUTH_GOOGLE_ID, clientSecret: process.env.AUTH_GOOGLE_SECRET }),
+    Google({ 
+      clientId: process.env.AUTH_GOOGLE_ID, 
+      clientSecret: process.env.AUTH_GOOGLE_SECRET, 
+        authorization: {
+        params: {
+          prompt: "select_account",
+          access_type: "offline",
+          response_type: "code"
+        }
+      }
+    }),
     GitHub({ clientId: process.env.AUTH_GITHUB_ID, clientSecret: process.env.AUTH_GITHUB_SECRET }),
     Apple({ clientId: process.env.AUTH_APPLE_ID, clientSecret: process.env.AUTH_APPLE_SECRET }),
   ], 

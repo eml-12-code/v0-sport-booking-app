@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS transactions_log (
   class_id VARCHAR(36), 
   action VARCHAR(36), 
   token_amount INT, 
-  token_balance_after INT
+  token_balance_after INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 );
 

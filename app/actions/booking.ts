@@ -251,9 +251,9 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
 
       // Log the cancellation
       await connection.execute(
-        `INSERT INTO transactions_log (member_id, class_id, action, token_amount, token_balance_after)
-         VALUES (?, ?, 'cancel', ?, ?)`,
-        [memberId, classId, -tokenCost, balanceAfterCancel]
+        `INSERT INTO transactions_log (member_id, class_id, action, token_amount, token_balance_after,created_at)
+         VALUES (?, ?, 'cancel', ?, ?, NOW())`,
+        [memberId, classId, tokenCost, balanceAfterCancel]
       );
 
       result = { success: true, message: `Booking cancelled (+${tokenCost} token${tokenCost !== 1 ? 's' : ''} refunded)`, isBooked: false };
@@ -303,10 +303,11 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
 
       const balanceAfterBook = currentTokens - tokenCost;
 
+
       // Log the booking transaction
       await connection.execute(
-        `INSERT INTO transactions_log (member_id, class_id, action, token_amount, token_balance_after)
-         VALUES (?, ?, 'book', ?, ?)`,
+        `INSERT INTO transactions_log (member_id, class_id, action, token_amount, token_balance_after, created_at )
+         VALUES (?, ?, 'book', ?, ?,  NOW() )`,
         [memberId, classId, -tokenCost, balanceAfterBook]
       );
 

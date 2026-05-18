@@ -1,4 +1,5 @@
 import NextAuth from 'next-auth'
+import crypto from "crypto" 
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
@@ -85,6 +86,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             console.log(`OAuth user already exists: ${email}`);
             // Optional: Update the last_login timestamp here if you have that column
           }
+          // == ELM == Add transactions_log record
+          // 
+
         } catch (error) {
           // Log the error but don't block the user from logging in
           console.error('Failed to sync OAuth user to database:', error);
@@ -92,8 +96,65 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return true; // Return true to allow the user to sign in
     },
+
+    // =======
+    async jwt({ token, user }) {
+      // Check the user email during initial token initialization or login refresh cycles
+      const emailToCheck = user?.email || token?.email;
+
+      if (emailToCheck) {
+        const hashedUserEmail = crypto
+          .createHash("sha256")
+          .update(emailToCheck.trim().toLowerCase())
+          .digest("hex");
+
+        const envAdminHashesString = process.env.ADMIN_EMAIL_HASH || "";
+        const approvedAdminHashes = envAdminHashesString
+          .split(",")
+          .map(hash => hash.trim());
+
+        // Lock the evaluation directly into the secure session token layout
+        token.isAdmin = approvedAdminHashes.includes(hashedUserEmail);
+      } else {
+        token.isAdmin = false;
+      }
+      return token;
+    },
+    // =========
+    async session({ session, token }) {
+
+      if (session.user) {
+        // Read the verified boolean flag from the secure JWT layer
+        session.user.isAdmin = token.isAdmin === true;
+        
+        console.log(`🔐 Admin Check: ${session.user.email} -> Allowed: ${session.user.isAdmin}`);
+      } else {
+        session.user.isAdmin = false;
+      }
+
+      return session;
+    },
+
+    //-----------
+    
+
+    //----------
   }
-
-
-
 })
+
+
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      isAdmin: boolean
+    } & DefaultSession["user"]
+  }
+}
+
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    isAdmin: boolean
+  }
+}

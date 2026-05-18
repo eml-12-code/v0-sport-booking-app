@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { SessionProvider } from "next-auth/react"
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthSessionProvider } from '@/components/auth/session-provider'
@@ -39,17 +40,15 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">
-        <AuthSessionProvider>{children}</AuthSessionProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+      <body>
+        <SessionProvider>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   )
 }
+
