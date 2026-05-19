@@ -83,7 +83,7 @@ export async function getClasses(date: Date , location: string): Promise<ClassIt
       `SELECT class_id AS classId, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
        FROM classes 
        WHERE date = ? AND location = ?
-       ORDER BY time`,
+       ORDER BY classes.time ASC`,
       [formattedDate, location]
     )
     console.log(`💾 Data saved to Redis cache: ${cacheKey}`)
