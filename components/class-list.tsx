@@ -18,11 +18,20 @@ interface ClassListProps {
   bookedClasses: string[]
   memberId: number
   handleBookingChange: (classId: string, isBooked: boolean) => void
+  selectedCalendarDate: Date 
 }
 
-export function ClassList({ classes, bookedClasses, memberId, handleBookingChange }: ClassListProps) {
+export function ClassList({ 
+  classes, 
+  bookedClasses, 
+  memberId, 
+  handleBookingChange, 
+  selectedCalendarDate }: ClassListProps) {
   
   console.log("🎨 [UI RENDER] Array items length arriving to ClassList:", classes?.length)
+
+  const fallbackDateString = new Date(selectedCalendarDate || new Date())
+    .toLocaleDateString("en-CA") // Generates reliable 'YYYY-MM-DD' strings
 
   if (classes.length === 0) {
     return (
@@ -55,10 +64,13 @@ export function ClassList({ classes, bookedClasses, memberId, handleBookingChang
         {classes.map((classItem) => (
           <ClassCard
             key={classItem.classId}
-            classItem={classItem}
-            isBooked={bookedClasses.includes(classItem.classId)}
-            memberId={memberId} 
-            onBookingChange={handleBookingChange}
+            classItem={{
+              ...classItem,
+              date: classItem.date || fallbackDateString 
+          }}
+          isBooked={bookedClasses.includes(classItem.classId)}
+          memberId={memberId} 
+          onBookingChange={handleBookingChange}
           />
         ))}
       </div>

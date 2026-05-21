@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { SessionProvider } from "next-auth/react"
+import { SessionLogger } from "@/components/session-logger"
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthSessionProvider } from '@/components/auth/session-provider'
@@ -40,15 +41,19 @@ export const metadata: Metadata = {
   },
 }
 
+
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
         <SessionProvider>
+          {/* 🔥 INSERT THIS HERE: Listens to all tab openings globally */}
+          <SessionLogger /> 
+          
           {children}
         </SessionProvider>
       </body>
     </html>
   )
 }
-

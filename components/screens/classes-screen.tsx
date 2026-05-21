@@ -1,3 +1,72 @@
+// ==================================================================================
+// 1. PARENT LEVEL: ClassesScreen (app/page.tsx -> ClassesScreen)
+// ==================================================================================
+// [State Hooks]
+//   ├─ selectedDate ─────┐ (e.g., Date Object: 2026-05-21)
+//   └─ selectedLocation ─┼─► triggers fetchData() ──► Queries MySQL & Redis Cache
+//                        │
+//                        ▼ 
+//          [Passes Down as React Props] ( class-list.tsx )
+//            classes={classes}
+//            bookedClasses={bookedClasses}
+//            memberId={memberId}
+//            selectedCalendarDate={selectedDate} ───┐
+//                                                   │
+//                                                   ▼
+// ==================================================================================
+// 2. INTERMEDIATE LEVEL: ClassList (components/class-list.tsx)
+// ==================================================================================
+//   Receives: Props from ClassesScreen
+//   Formats: Selected Date Object ──► "2026-05-21" (fallbackDateString)
+//   Loops: classes.map((classItem) => ...)
+//            │
+//            ▼ Injects date property into item payload object
+//          [Passes Down as React Props]
+//            classItem={{ ...classItem, date: "2026-05-21" }}
+//            isBooked={true / false}
+//            memberId={12}
+//                                                   │
+//                                                   ▼
+// ==================================================================================
+// 3. CHILD CARD COMPONENT: ClassCard (components/class-card.tsx)
+// ==================================================================================
+// [Internal Live Engine Tracking]
+//   └─ useEffect (Interval running every 10 seconds)
+//        └─ Evaluates: Live Time vs (classItem.date + classItem.time)
+//             └─ IF passed ──► Blocks button click, applies grey variant CSS classes.
+// 
+// [User Interaction: Clicks "Book Now" / "Cancel Booking"]
+//   │
+//   ▼ Intercepts action flow using local state flags
+//   ├─ If New Booking   ──► Sends execution straight to server action pipeline
+//   └─ If Cancel Action ──► Renders <Dialog> Modal ──► User Clicks Confirm
+//                                                                 │
+//                                                                 ▼
+// ==================================================================================
+// 4. BACKEND PROCESSING: Server Action (app/actions/booking.ts)
+// ==================================================================================
+// Runs securely on the Server Node.js runtime environment:
+//   1. redlock.acquire() ─────► Locks Class Row (Prevents double booking race hazards)
+//   2. SQL Transaction ──────► Checks user token balance inside 'accounts' table
+//   3. SQL Execution ────────► Deducts/Refunds tokens, updates 'classes' spots
+//   4. SQL Logging ──────────► INSERTS confirmation row to 'transactions_log'
+//   5. redis.del() ──────────► Wipes Redis cache matching target date + location
+//   6. revalidatePath("/") ──► Flushes server layout page data stream caches
+//   7. Return Result ────────► Sends { success: true, isBooked: true/false } back
+//                                                                 │
+//                                                                 ▼
+// ==================================================================================
+// 5. STATE SYNC UP RE-RENDER LOOP
+// ==================================================================================
+//   ClassCard receives server callback response payload:
+//     └─ Triggers confirmation popup modal windows on layout surface.
+//     └─ Calls onBookingChange() callback hook parameter.
+//          │
+//          ▼ Elevates state updates upward to parent
+//        ClassesScreen.handleBookingChange() updates state arrays.
+//          └─ Triggers reactive screen rendering, syncing all tab elements.
+
+
 "use client"
 
 import { useState, useEffect, useCallback } from "react" 
@@ -18,11 +87,12 @@ const getGreeting = (): string => {
 }
 
 export function ClassesScreen() {
+
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedLocation, setSelectedLocation] = useState<string>(locations[0])
   const [isLocationOpen, setIsLocationOpen] = useState(false)
 
-  //  CHANGE 2: Added state variables to hold data fetched from the database
+  // To hold data fetched from the database
   const { data : session , status } = useSession
 
   const [classes, setClasses] = useState([])
@@ -30,10 +100,10 @@ export function ClassesScreen() {
   const [memberId, setMemberId] = useState<number>(0)
   const [isLoading, setIsLoading] = useState(true)
 
-  // CHANGE 3: Added an orchestrator function to sync profiles and classes
+  // Added an orchestrator function to sync profiles and classes
   const fetchData = useCallback(async () => {
 
-    if ( status == 'Loading') return;
+  if ( status == 'Loading') return;
 
     setIsLoading(true)
     try {
@@ -63,7 +133,7 @@ export function ClassesScreen() {
   }, [fetchData, status ])
 
 
-  // CHANGE 5: Added an state array handler to reactively toggle card bookings
+  // Added an state array handler to reactively toggle card bookings
   const handleBookingChange = (classId: string, isBooked: boolean) => {
     setBookedClasses((prev) =>
       isBooked ? [...prev, classId] : prev.filter((id) => id !== classId)
@@ -76,7 +146,7 @@ export function ClassesScreen() {
     session?.user?.name?.trim() ||
     session?.user?.email?.split("@")[0]?.trim() ||
     ""
-    console.log ( "ClassesScreen --> ")
+  console.log ( "ClassesScreen --> ")
 
   return (
     <>
@@ -142,7 +212,6 @@ export function ClassesScreen() {
       {/* Main Content */}
 
       <main className="px-5 pb-28">
-
         {/* CHANGE 6: Replaced old parameters with your complete set of shared data variables */}
         {isLoading ? (
           <div className="text-center py-10 text-muted-foreground text-sm">Loading classes...</div>
@@ -152,6 +221,7 @@ export function ClassesScreen() {
             bookedClasses={bookedClasses}
             memberId={memberId}
             handleBookingChange={handleBookingChange} 
+            selectedCalendarDate={selectedDate} 
           />
         )}
       </main>

@@ -74,12 +74,10 @@ INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, cl
 ('HK-4', '10:30:00', 'Spinning', 'Room D1', 'James Lee', '45 min', 1,1, 'green', CURDATE(), 'Hong Kong'),
 ('HK-5', '12:00:00', 'Boxing', 'Room A2', 'Lisa Park', '60 min', 10,10, 'blue', CURDATE(), 'Hong Kong'),
 ('HK-6', '14:00:00', 'Strength', 'Room B1', 'David Kim', '55 min', 8,8, 'pink', CURDATE(), 'Hong Kong'),
-('HK-7', '16:00:00', 'Yoga', 'Room C1', 'Amy Rodriguez', '60 min', 14,14, 'yellow', CURDATE(), 'Hong Kong'),
-('HK-8', '18:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
-('HK-9', '18:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
-('HK-10', '19:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
-('HK-11', '20:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
-('HK-12', '21:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong');
+('HK-7', '21:00:00', 'Yoga', 'Room C1', 'Amy Rodriguez', '60 min', 14,14, 'yellow', CURDATE(), 'Hong Kong'),
+('HK-8', '22:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
+('HK-9', '23:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
+('HK-10', '23:05:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong');
 
 -- Insert sample classes for tomorrow
 INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, class_size,color, date, location) VALUES
@@ -109,3 +107,5 @@ INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, cl
 INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, class_size,color, date, location) VALUES
 ('mc-1', '08:00:00', 'Spinning', 'Room M1', 'Alex Ho', '45 min', 12, 12,'green', CURDATE(), 'Macau'),
 ('mc-2', '10:00:00', 'Pilates', 'Room M2', 'Jenny Liu', '50 min', 10, 10,'yellow', CURDATE(), 'Macau');
+
+

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { toggleBooking } from "@/app/actions/booking"
 import { useState, useTransition, useMemo } from "react"
+
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
 export interface ClassItem {
   classId: string
   time: string
+  date: string
   name: string
   room: string
   instructor: string
@@ -79,6 +81,7 @@ const classIcons: Record<string, JSX.Element> = {
 }
 
 export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: ClassCardProps) {
+
   const [isPending, startTransition] = useTransition()
   
   const [showErrorDialog, setShowErrorDialog] = useState(false)
@@ -90,16 +93,29 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
 
   const hasPassed = useMemo(() => {
     try {
-      const [time, modifier] = classItem.time.split(' ')
-      let [hours, minutes] = time.split(':').map(Number)
+
+      const [year, month, day] = classItem.date.split("-").map(Number)
+      const timeStr = classItem.time.trim().toUpperCase()
+      const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
+
+
+      console.log ( "Class-Card ", year," ", month," ", day , " ",timeStr, " ", match )
+      
+      if (!match) return false
+
+      let hours = parseInt(match[1], 10)
+      const minutes = parseInt(match[2], 10)
+      const modifier = match[3]
+
       if (modifier === 'PM' && hours !== 12) hours += 12
       if (modifier === 'AM' && hours === 12) hours = 0
 
-      const classDate = new Date()
-      classDate.setHours(hours, minutes, 0, 0)
-      
-      return new Date() > classDate
-    } catch {
+
+      const exactClassDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
+
+      return new Date() > exactClassDateTime
+    } catch (e) {
+      console.error("Failed to parse combined class deadline time:", e)
       return false
     }
   }, [classItem.time])

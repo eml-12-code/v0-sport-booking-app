@@ -1,9 +1,28 @@
+// 
+//                   ┌──────────────────────┐
+//                   │   auth.config.js     │ Base configurations, middleware rules
+//                   └──────────┬───────────┘
+//   
+//                            │ (Extended by)
+//                              ▼
+// ┌────────────────┐ 🧩 ┌──────────────┐ 💾 ┌──────────────┐
+// │ CLIENT SCREENS │ ◄─►│   auth.js    │ ◄─►│  src/lib/db  │ MySQL Connection Pool
+// └───────┬────────┘    └──────────────┘    └──────────────┘
+//         │                    ▲
+//         │ (useSession)       │ (Server Action invokes auth())
+//         ▼                    ▼
+// ┌────────────────┐    ┌──────────────┐
+// │ profile-screen │    │  account.ts  │ Server Action queries profile info
+// └────────────────┘    └──────────────┘
+// 
+
 import NextAuth from 'next-auth'
 import crypto from "crypto" 
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { authConfig } from './auth.config'
+
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -30,10 +49,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             'SELECT member_id, username, email, password FROM accounts WHERE email = ? LIMIT 1',
             [username]
           )
-          console.log('Username' , username )
-          console.log('Password' ,)
-          console.log('--- Database Query Result ---')
-          console.log('Raw rows from DB:', JSON.stringify(rows, null, 2)) 
+          console.log('🔐 Username' , username )
+          console.log('🔐 Password' ,)
+          console.log('🔐 --- Database Query Result ---')
+          console.log('🔐 Raw rows from DB:', JSON.stringify(rows, null, 2)) 
           
           const user = rows[0] 
 
@@ -44,7 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
           }
         } catch (error) {
-          console.error('Login Database Error:', error)
+          console.error('❌ Login Database Error:', error)
           return null
         }
         return null
@@ -52,9 +71,51 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),  
   ],
 
+
+  //----
+// 🔥 ADDED EVENTS LAYER: Captures all verified logins automatically
+// If the user does not exist in your MySQL accounts database yet, 
+// it automatically writes a fresh record row.
+  
+  events: {
+    async signIn({ user }) {
+      if (!user?.email) return
+
+      try {
+        // 1. Find the accurate member ID matching the authenticated email string
+        const [rows]: any = await pool.execute(
+          "SELECT member_id FROM accounts WHERE email = ? LIMIT 1",
+          [user.email]
+        )
+
+        if (rows.length > 0) {
+          const memberId = rows[0].member_id
+
+          // 2. Log the event in your transactions tracking table
+          await pool.execute(
+            `INSERT INTO transactions_log 
+              (member_id, action, class_id, token_amount, token_balance_after, created_at)
+             VALUES (?, 'login', NULL, NULL, NULL, NOW())`,
+            [memberId]
+          )
+          console.log(`🔐 System Login transaction registered for member ID: ${memberId}`)
+        }
+      } catch (error) {
+        console.error("❌ Failed to commit login event to database:", error)
+      }
+    }
+  },
+
+
+  //---
+  // signIn({ user, account }): Intercepts social network accounts 
+  // (like Google or GitHub OAuth). If the user does not exist in your 
+  // MySQL accounts database yet, it automatically writes a fresh record row.
+  
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user, account }) {
+
       // 1. Only process OAuth providers (Google, GitHub, etc.)
       if (account && account.provider !== 'credentials' && user.email) {
         try {
@@ -98,6 +159,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     // =======
+    // Executes whenever an encrypted JSON Web Token session cookie is generated. 
+    // It hashes the user's email with SHA-256 and compares it against 
+    // your process.env.ADMIN_EMAIL_HASH list to attach a secure token.isAdmin = true flag.
+
+    
     async jwt({ token, user }) {
       // Check the user email during initial token initialization or login refresh cycles
       const emailToCheck = user?.email || token?.email;
@@ -120,25 +186,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return token;
     },
-    // =========
-    async session({ session, token }) {
 
+
+    // =========
+    // Transports the backend token flag state parameters over onto the 
+    // frontend session.user.isAdmin layer so client pages can read user role clearances.
+    async session({ session, token }) {
       if (session.user) {
-        // Read the verified boolean flag from the secure JWT layer
         session.user.isAdmin = token.isAdmin === true;
-        
-        console.log(`🔐 Admin Check: ${session.user.email} -> Allowed: ${session.user.isAdmin}`);
       } else {
         session.user.isAdmin = false;
       }
-
       return session;
     },
-
-    //-----------
-    
-
-    //----------
   }
 })
 

@@ -62,8 +62,7 @@ export async function getClasses(date: Date , location: string): Promise<ClassIt
     
     console.log("📥 [getClasses INPUT] Raw date passed to function:", date, "Type of date:", typeof date);
     const formattedDate = date.toISOString().split('T')[0]
-    console.log("formatedDate:",formattedDate)
-
+    
     console.log("📥 [getClasses INPUT] Processing SQL search for date:", formattedDate);
     const cacheKey = getCacheKey(formattedDate, location);
     console.log("📥 cacheKey :", cacheKey);
@@ -72,13 +71,13 @@ export async function getClasses(date: Date , location: string): Promise<ClassIt
     const cachedData = await redis.get(cacheKey)
     if (cachedData) {
 
-      console.log('Redis Cache Hit for:', cacheKey)
+      console.log('📥 Redis Cache Hit for:', cacheKey)
       console.table(JSON.parse(cachedData));
       return JSON.parse(cachedData)
     }
 
     // 2. If not in Redis, fetch from MySQL
-    console.log('Redis Cache Miss. Fetching from MySQL...')
+    console.log('📥 Redis Cache Miss. Fetching from MySQL...')
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT class_id AS classId, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
        FROM classes 
@@ -116,7 +115,7 @@ export async function getBookedClasses(
   }
   
   try {
-    console.log( "Search booking " , memberId )
+    console.log( "📥 Search booking for memberId" , memberId )
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT 
         b.booking_id AS bookingId, 
