@@ -79,7 +79,7 @@ export async function getClasses(date: Date , location: string): Promise<ClassIt
     // 2. If not in Redis, fetch from MySQL
     console.log('📥 Redis Cache Miss. Fetching from MySQL...')
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT class_id AS classId, DATE_FORMAT(time, '%l:%i %p') as time, name, room, instructor, duration, spots, color 
+      `SELECT class_id AS classId, name, date, DATE_FORMAT(time, '%l:%i %p') as time, location, room, instructor, duration, spots, color 
        FROM classes 
        WHERE date = ? AND location = ?
        ORDER BY classes.time ASC`,
@@ -121,11 +121,11 @@ export async function getBookedClasses(
         b.booking_id AS bookingId, 
         b.class_id AS classId, 
         c.name AS className, 
+        c.date, 
         DATE_FORMAT(c.time, '%l:%i %p') AS time, 
+        c.location,
         c.room, 
         c.instructor, 
-        c.date, 
-        c.location,
         c.spots
        FROM bookings b
        JOIN classes c ON b.class_id = c.class_id
@@ -198,7 +198,7 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
     // 1. Fetch target class information
 
     const [classRows] = await connection.execute<RowDataPacket[]>(
-      `SELECT date, location, spots, token_cost FROM classes WHERE class_id = ? FOR UPDATE`,
+      `SELECT class_id, name, date, time, location, room, spots, token_cost FROM classes WHERE class_id = ? FOR UPDATE`,
       [classId]
     );
 
@@ -208,6 +208,11 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
     if (classRows.length === 0) throw new Error('Class not found');
 
     const classInfo = classRows[0];
+    const name = classInfo.name;
+    const location = classInfo.location
+    const room = classInfo.room
+    const time = classInfo.time
+    const date = classInfo.date
     const tokenCost = Number(classInfo.token_cost) || 1;
     const formattedDate = new Date(classInfo.date).toISOString().split('T')[0];
 
@@ -250,9 +255,9 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
 
       // Log the cancellation
       await connection.execute(
-        `INSERT INTO transactions_log (member_id, class_id, action, token_amount, token_balance_after,created_at)
-         VALUES (?, ?, 'cancel', ?, ?, NOW())`,
-        [memberId, classId, tokenCost, balanceAfterCancel]
+        `INSERT INTO transactions_log (member_id, class_id,name, date, time, location, room, action, token_amount, token_balance_after,created_at)
+         VALUES (?, ?,?,?,?,?, ?,'cancel', ?, ?, NOW())`,
+        [memberId, classId, name , date,time, location, room, -tokenCost, balanceAfterCancel]
       );
 
       result = { success: true, message: `Booking cancelled (+${tokenCost} token${tokenCost !== 1 ? 's' : ''} refunded)`, isBooked: false };
@@ -271,7 +276,7 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
         [memberId]
       );
 
-      console.log ( "ACCOUNTS Info >" , memberId , "<")
+      console.log ( "ACCOUNTS Token Info >" , memberId , "<")
       console.table(accountRows)
 
       if (accountRows.length === 0) {
@@ -286,10 +291,12 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
 
       //  Write active booking record
 
+      console.log ("HERE")
+
       await connection.execute(
-        `INSERT INTO bookings (class_id, member_id, booking_status) VALUES (?, ?, 'confirmed')
+        `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) VALUES (?,?,?,?,?, ?, ?, 'confirmed')
          ON DUPLICATE KEY UPDATE booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
-        [classId, memberId]
+        [classId, name, date, time, location, room, memberId]
       );
       
       await connection.execute(`UPDATE classes SET spots = spots - 1 WHERE class_id = ?`, [classId]);
@@ -305,9 +312,9 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
 
       // Log the booking transaction
       await connection.execute(
-        `INSERT INTO transactions_log (member_id, class_id, action, token_amount, token_balance_after, created_at )
-         VALUES (?, ?, 'book', ?, ?,  NOW() )`,
-        [memberId, classId, -tokenCost, balanceAfterBook]
+        `INSERT INTO transactions_log (member_id, class_id,name, date, time, location, room, action, token_amount, token_balance_after,created_at)
+         VALUES (?, ?,?,?,?,?, ?,'book', ?, ?, NOW())`,
+        [memberId, classId, name , date,time, location, room, tokenCost, balanceAfterBook]  
       );
 
       result = { success: true, message: `Class booked successfully (-${tokenCost} token${tokenCost !== 1 ? 's' : ''})`, isBooked: true };

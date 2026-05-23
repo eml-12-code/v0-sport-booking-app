@@ -32,8 +32,8 @@ export async function logCookieSessionIfValid() {
     if (recentLogs.length === 0) {
       await pool.execute(
         `INSERT INTO transactions_log 
-          (member_id, action, class_id, token_amount, token_balance_after, created_at)
-         VALUES (?, 'login', NULL, NULL, NULL, NOW())`,
+          (member_id, action, class_id, name, token_amount, token_balance_after, created_at)
+         VALUES (?, 'login', NULL, NULL, NULL, NULL, NOW())`,
         [memberId]
       )
       console.log(`🍪 Cookie session tracking logged successfully for member: ${memberId}`)
@@ -67,8 +67,8 @@ export async function handleUserLogout() {
         // 2. Insert logout log record matching your explicit schema setup
         await pool.execute(
           `INSERT INTO transactions_log 
-            (member_id, action, class_id, token_amount, token_balance_after, created_at)
-           VALUES (?, 'logout', NULL, NULL, NULL, NOW())`,
+            (member_id, action, class_id, name, token_amount, token_balance_after, created_at)
+           VALUES (?, 'logout', NULL, NULL, NULL, NULL, NOW())`,
           [memberId]
         )
         console.log(`🔓 Logout logged in DB for member: ${memberId}`)

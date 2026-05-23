@@ -2,9 +2,11 @@
 
 import { ClassCard } from "@/components/class-card"
 
+// 🟢 FIXED: Added optional date string parameter to match the layout object expansion
 interface ClassItem {
   classId: string
   time: string
+  date?: string // ◄ Added to clear out the TypeScript property access compilation crash
   name: string
   room: string
   instructor: string
@@ -26,14 +28,15 @@ export function ClassList({
   bookedClasses, 
   memberId, 
   handleBookingChange, 
-  selectedCalendarDate }: ClassListProps) {
+  selectedCalendarDate 
+}: ClassListProps) {
   
   console.log("🎨 [UI RENDER] Array items length arriving to ClassList:", classes?.length)
 
   const fallbackDateString = new Date(selectedCalendarDate || new Date())
     .toLocaleDateString("en-CA") // Generates reliable 'YYYY-MM-DD' strings
 
-  if (classes.length === 0) {
+  if (!classes || classes.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="flex flex-col items-center gap-3">
@@ -66,15 +69,17 @@ export function ClassList({
             key={classItem.classId}
             classItem={{
               ...classItem,
+              // 🟢 FIXED: Safely applies the fallback string with full TypeScript type safety
               date: classItem.date || fallbackDateString 
-          }}
-          isBooked={bookedClasses.includes(classItem.classId)}
-          memberId={memberId} 
-          onBookingChange={handleBookingChange}
+            }}
+            isBooked={bookedClasses.includes(classItem.classId)}
+            memberId={memberId} 
+            onBookingChange={handleBookingChange}
           />
         ))}
       </div>
     </>
   )
 }
+
 

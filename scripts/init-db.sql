@@ -5,16 +5,17 @@ USE sport_booking;
 -- Classes table to store available classes
 CREATE TABLE IF NOT EXISTS classes (
   class_id VARCHAR(36) PRIMARY KEY,
-  time TIME NOT NULL,
   name VARCHAR(100) NOT NULL,
+  date DATE NOT NULL,
+  time TIME NOT NULL,
+  location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
   room VARCHAR(50) NOT NULL,
   instructor VARCHAR(100) NOT NULL,
   duration VARCHAR(20) NOT NULL,
   spots INT NOT NULL,
   class_size INT NOT NULL,
   color ENUM('blue', 'pink', 'yellow', 'green') NOT NULL,
-  date DATE NOT NULL,
-  location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
+  
   token_cost INT NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -23,6 +24,11 @@ CREATE TABLE IF NOT EXISTS classes (
 CREATE TABLE IF NOT EXISTS bookings (
   booking_id INT AUTO_INCREMENT PRIMARY KEY,
   class_id VARCHAR(36) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  date DATE NOT NULL,
+  time TIME NOT NULL,
+  location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
+  room VARCHAR(50) NOT NULL,
   member_id VARCHAR(100) NOT NULL DEFAULT 'anonymous',
   booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   booking_status ENUM('confirmed', 'cancelled') DEFAULT 'confirmed',
@@ -57,12 +63,18 @@ CREATE TABLE IF NOT EXISTS contracts (
 
 -- transactions_log Table 
 CREATE TABLE IF NOT EXISTS transactions_log (
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  action VARCHAR(36), 
   member_id INT, 
   class_id VARCHAR(36), 
-  action VARCHAR(36), 
+  name VARCHAR(100) NULL,
+  date DATE NULL,
+  time TIME NULL,
+  location VARCHAR(100) NULL,
+  room VARCHAR(50) NULL,
   token_amount INT, 
-  token_balance_after INT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  token_balance_after INT
+
 
 );
 

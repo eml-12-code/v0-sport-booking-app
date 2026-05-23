@@ -3,8 +3,7 @@
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { toggleBooking } from "@/app/actions/booking"
-import { useState, useTransition, useMemo } from "react"
-
+import { useState, useEffect, useTransition } from "react"
 import {
   Dialog,
   DialogContent,
@@ -16,8 +15,8 @@ import {
 
 export interface ClassItem {
   classId: string
-  time: string
-  date: string
+  time: string       // E.g., "10:00 AM" or "14:30"
+  date: string       // E.g., "2026-05-22"
   name: string
   room: string
   instructor: string
@@ -81,27 +80,53 @@ const classIcons: Record<string, JSX.Element> = {
 }
 
 export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: ClassCardProps) {
-
   const [isPending, startTransition] = useTransition()
+  const [hasPassed, setHasPassed] = useState(false)
   
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
-  const [showCancelDialog, setShowCancelDialog] = useState(false) // New state for cancel confirmation
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
   const icon = classIcons[classItem.name] || classIcons.HIIT
 
-  const hasPassed = useMemo(() => {
+  // Live interval time-expiration check runner hook
+  useEffect(() => {
+  function checkTimeExpiration() {
     try {
+      if (!classItem || !classItem.time) {
+        setHasPassed(false)
+        return
+      }
 
-      const [year, month, day] = classItem.date.split("-").map(Number)
+      let year: number, month: number, day: number;
+
+      // 🟢 UNIVERSAL NORMALIZER: Force whatever format classItem.date is into a clean Date object
+      const safeDateObject = classItem.date ? new Date(classItem.date) : new Date();
+
+      if (isNaN(safeDateObject.getTime())) {
+        // Safe Fallback if parsing fails: Use current live date variables
+        const fallback = new Date()
+        year = fallback.getFullYear()
+        month = fallback.getMonth() + 1
+        day = fallback.getDate()
+      } else {
+        // Extract accurate numeric parameters directly from our verified date object instance
+        year = safeDateObject.getFullYear()
+        month = safeDateObject.getMonth() + 1 // JavaScript months are 0-11, add 1 to normalize
+        day = safeDateObject.getDate()
+      }
+
       const timeStr = classItem.time.trim().toUpperCase()
+      console.log("⏱️ ClassCard Verification Fixed:", classItem.name, year, month, day, timeStr)
+
+      // 🟢 FIXED REGEX: Anchor set correctly to string end '$' instead of literal character '\$'
       const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
 
-
-      console.log ( "Class-Card ", year," ", month," ", day , " ",timeStr, " ", match )
-      
-      if (!match) return false
+      if (!match) {
+        setHasPassed(false)
+        return
+      }  
 
       let hours = parseInt(match[1], 10)
       const minutes = parseInt(match[2], 10)
@@ -110,15 +135,23 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
       if (modifier === 'PM' && hours !== 12) hours += 12
       if (modifier === 'AM' && hours === 12) hours = 0
 
-
+      // Create the precise combined timestamp milestone parameters
       const exactClassDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
-
-      return new Date() > exactClassDateTime
+      
+      // Update our reactive component layout status tracking variable
+      setHasPassed(new Date() > exactClassDateTime)
     } catch (e) {
       console.error("Failed to parse combined class deadline time:", e)
-      return false
     }
-  }, [classItem.time])
+  }
+
+    checkTimeExpiration()
+    const interval = setInterval(checkTimeExpiration, 10000) // Re-evaluate every 10 seconds silently on screen
+    return () => clearInterval(interval)
+  }, [classItem.date, classItem.time, classItem.name])
+
+
+
 
   // Core execution handler used for both standard booking and confirmed cancellation triggers
   const executeBookingToggle = () => {
@@ -160,9 +193,11 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
 
   return (
     <>
+      {/* Main card grid container with reactive conditional dimming states */}
       <div className={cn(
         "rounded-2xl p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02]",
-        colorClasses[classItem.color]
+        colorClasses[classItem.color],
+        hasPassed && "opacity-50 saturate-50 pointer-events-none select-none shadow-none scale-100 hover:scale-100 hover:shadow-none"
       )}>
         <div className="flex items-start justify-between">
           <div className="flex gap-3">
@@ -205,7 +240,7 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
         </div>
       </div>
 
-      {/* 1. ERROR POPUP */}
+      {/* 1. ERROR DIALOG POPUP */}
       <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -224,7 +259,7 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
         </DialogContent>
       </Dialog>
 
-      {/* 2. CONFIRMED BOOKING DETAILS POPUP */}
+      {/* 2. CONFIRMED DETAILS POPUP */}
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -266,7 +301,7 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
         </DialogContent>
       </Dialog>
 
-      {/* 3. CANCELLATION CONFIRMATION PROMPT POPUP */}
+      {/* 3. CANCELLATION PROMPT POPUP */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -300,5 +335,7 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
     </>
   )
 }
+
+          
 
 

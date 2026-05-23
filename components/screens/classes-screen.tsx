@@ -67,12 +67,14 @@
 //          └─ Triggers reactive screen rendering, syncing all tab elements.
 
 
+
+
 "use client"
 
-import { useState, useEffect, useCallback } from "react" 
+import { useState, useEffect, useCallback, useRef } from "react" 
 import { DatePicker } from "@/components/date-picker"
 import { ClassList } from "@/components/class-list"
-import { useSession } from "next-auth/react"                // holds loading state
+import { useSession } from "next-auth/react"
 import { getAccountProfile } from "@/app/actions/account"
 import { getClasses, getBookedClasses } from "@/app/actions/booking"
 
@@ -87,66 +89,137 @@ const getGreeting = (): string => {
 }
 
 export function ClassesScreen() {
-
   const [selectedDate, setSelectedDate] = useState(new Date())
+
+  // 🟢 FIXED: Target index [0] explicitly to store a clean single string configuration item
   const [selectedLocation, setSelectedLocation] = useState<string>(locations[0])
   const [isLocationOpen, setIsLocationOpen] = useState(false)
 
-  // To hold data fetched from the database
-  const { data : session , status } = useSession
+  const { data: session, status } = useSession()
 
   const [classes, setClasses] = useState([])
   const [bookedClasses, setBookedClasses] = useState<string[]>([])
   const [memberId, setMemberId] = useState<number>(0)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Added an orchestrator function to sync profiles and classes
+  // Mutable reference tracking variable to safely pass array context blocks
+  const classesRef = useRef(classes)
+
+  // Orchestrator function to sync profiles and classes
   const fetchData = useCallback(async () => {
+    if (status === 'loading') return
 
-  if ( status == 'Loading') return;
+    // Show visual loader frame only if the active viewport state has no card arrays rendered yet
+    if (classesRef.current.length === 0) {
+      setIsLoading(true)
+    }
 
-    setIsLoading(true)
     try {
+      console.log("🔍 [Trace 1] Starting fetchData loop...")
       const profile = await getAccountProfile()
       const currentMemberId = profile ? profile.memberId : 0
       setMemberId(currentMemberId)
+
+      console.log("🔍 [Trace 2] Profile loaded. Member ID:", currentMemberId)
+      console.log("🔍 [Trace 3] Querying MySQL for Date:", selectedDate, "Location:", selectedLocation)
 
       const [classesData, bookedData] = await Promise.all([
         getClasses(selectedDate || new Date(), selectedLocation),
         getBookedClasses(currentMemberId)
       ])
 
-      setClasses(classesData)
+      console.log("🔍 [Trace 4] MySQL Classes Data Received:", classesData)
+      console.log("🔍 [Trace 5] MySQL Booked IDs Received:", bookedData)
+
       setBookedClasses(bookedData.map((b) => b.classId))
+      setClasses(classesData || [])
+      classesRef.current = classesData || [] // Updates reference variable silently without re-renders
+      
+      console.log("🔍 [Trace 6] React States updated successfully.")
     } catch (error) {
-      console.error("Failed to load class content arrays:", error)
-    } finally {
+      console.error("❌ CRASH inside fetchData loop orchestrator:", error)
+    } {
       setIsLoading(false)
     }
-  }, [selectedDate, selectedLocation, status])
+  }, [selectedDate, selectedLocation, status]) // Optimized dependency array to protect runtime loop states
 
-
-  // listens to auth shifts and re-queries automatically
-
-  useEffect (() => {
+  // Smart polling effect loop with auto-shutdown safety parameters
+  useEffect(() => {
     fetchData()
-  }, [fetchData, status ])
 
+  // Inside your useEffect hook block in classes-screen.tsx -> Replace isClassExpired with this:
 
-  // Added an state array handler to reactively toggle card bookings
-  const handleBookingChange = (classId: string, isBooked: boolean) => {
+  const isClassExpired = (cls: any) => {
+    try {
+      if (!cls || !cls.time) return false;
+
+      let year: number, month: number, day: number;
+
+      // 🟢 UNIVERSAL NORMALIZER: Convert whatever format cls.date is into a clean Date object
+      const safeDateObject = cls.date ? new Date(cls.date) : new Date();
+
+      if (isNaN(safeDateObject.getTime())) {
+        const fallback = new Date()
+        year = fallback.getFullYear()
+        month = fallback.getMonth() + 1
+        day = fallback.getDate()
+      } else {
+        year = safeDateObject.getFullYear()
+        month = safeDateObject.getMonth() + 1
+        day = safeDateObject.getDate()
+      }
+
+      const timeStr = cls.time.trim().toUpperCase()
+      const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
+      if (!match) return false
+
+      let hours = parseInt(match[1], 10)
+      const minutes = parseInt(match[2], 10)
+      const modifier = match[3]
+
+      if (modifier === 'PM' && hours !== 12) hours += 12
+      if (modifier === 'AM' && hours === 12) hours = 0
+
+      const exactClassDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
+      return new Date() > exactClassDateTime
+    } catch (e) {
+      console.error("❌ Polling pre-check parser error:", e)
+      return false
+    }
+  }
+
+    const syncInterval = setInterval(() => {
+      const currentOnScreenClasses = classesRef.current
+
+      if (currentOnScreenClasses && currentOnScreenClasses.length > 0) {
+        const hasActiveFutureClasses = currentOnScreenClasses.some((cls: any) => !isClassExpired(cls))
+
+        if (!hasActiveFutureClasses) {
+          console.log("⏹️ [Live Sync Stopped] All classes on screen have passed. Clearing polling thread interval.")
+          clearInterval(syncInterval)
+          return
+        }
+      }
+
+      console.log("🔄 [Live Sync Check] Future classes active on view layer. Syncing spot parameters...")
+      fetchData()
+    }, 5000)
+
+    return () => clearInterval(syncInterval)
+  }, [fetchData, status])
+
+  const handleBookingChange = async (classId: string, isBooked: boolean) => {
     setBookedClasses((prev) =>
       isBooked ? [...prev, classId] : prev.filter((id) => id !== classId)
     )
+    await fetchData()
   }
-
-// =======
 
   const userDisplayName =
     session?.user?.name?.trim() ||
     session?.user?.email?.split("@")[0]?.trim() ||
     ""
-  console.log ( "ClassesScreen --> ")
+  console.log("ClassesScreen --> Rendering view grid canvas surface layers")
 
   return (
     <>
@@ -210,9 +283,7 @@ export function ClassesScreen() {
       </header>
 
       {/* Main Content */}
-
       <main className="px-5 pb-28">
-        {/* CHANGE 6: Replaced old parameters with your complete set of shared data variables */}
         {isLoading ? (
           <div className="text-center py-10 text-muted-foreground text-sm">Loading classes...</div>
         ) : (
@@ -225,7 +296,7 @@ export function ClassesScreen() {
           />
         )}
       </main>
-
     </>
   )
 }
+
