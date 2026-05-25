@@ -118,9 +118,9 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
       }
 
       const timeStr = classItem.time.trim().toUpperCase()
-      console.log("⏱️ ClassCard Verification Fixed:", classItem.name, year, month, day, timeStr)
+      // console.log("⏱️ ClassCard Verification Fixed:", classItem.name, year, month, day, timeStr)
 
-      // 🟢 FIXED REGEX: Anchor set correctly to string end '$' instead of literal character '\$'
+      // FIXED REGEX: Anchor set correctly to string end '$' instead of literal character '\$'
       const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
 
       if (!match) {

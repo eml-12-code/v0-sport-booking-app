@@ -106,9 +106,7 @@ export async function getClasses(date: Date , location: string): Promise<ClassIt
 
 
 // Get user's booked classes
-export async function getBookedClasses(
-    memberId: number
-): Promise<BookedClassItem[]> {
+export async function getBookedClasses( memberId: number ): Promise<BookedClassItem[]> {
 
   if (!memberId || memberId === 0) {
     return []
@@ -193,8 +191,6 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
     // Start SQL Transaction
     await connection.beginTransaction();
 
-    console.log (" After Transaction ");
-
     // 1. Fetch target class information
 
     const [classRows] = await connection.execute<RowDataPacket[]>(
@@ -223,7 +219,7 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
       [classId, memberId]
     );
 
-    console.log (" Select FROM bookings ");
+    console.log ("Select FROM bookings ");
     console.table(existing);
 
     let result: BookingResult;
@@ -236,8 +232,6 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
         [classId, memberId]
       );
       await connection.execute(`UPDATE classes SET spots = spots + 1 WHERE class_id = ?`, [classId]);
-
-      console.log ( "Before Refund ")
 
       // Refund tokens to user account
       await connection.execute(
@@ -291,8 +285,6 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
 
       //  Write active booking record
 
-      console.log ("HERE")
-
       await connection.execute(
         `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) VALUES (?,?,?,?,?, ?, ?, 'confirmed')
          ON DUPLICATE KEY UPDATE booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
@@ -308,7 +300,6 @@ export async function toggleBooking(classId: string,  memberId: number ): Promis
       );
 
       const balanceAfterBook = currentTokens - tokenCost;
-
 
       // Log the booking transaction
       await connection.execute(
