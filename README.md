@@ -62,7 +62,7 @@ show tables;
 
 ```
 
-````
+```bash
 ┌────────────────────────────────────────────────────────┐
 │  1. THE DATA MASTER (Parent Container)                 │
 │     File: classes-screen.tsx (ClassesScreen)           │
@@ -88,4 +88,43 @@ show tables;
 
 ```
 
+Using Lua script 
+
+```bash
+
+┌────────────────────────┐               ┌────────────────────────┐
+│  next-app Container    │               │ redis-cache Container  │
+├────────────────────────┤               ├────────────────────────┤
+│ 1. Boots up            │               │ 1. Boots up (Empty RAM)│
+│ 2. Reads booking.lua   │               │                        │
+│ 3. Sends SCRIPT LOAD  ───────────────> │ 2. Stores script in RAM│
+│    to Redis            │               │ 3. Returns SHA1 Hash   │
+│ 4. Receives SHA1 Hash  │ <─────────────│                        │
+└────────────────────────┘               └────────────────────────┘
+
+
+  
+```
+
+
+
+```bash
+docker compose down -v    
+docker compose up --build -d
+ 
+  Expect to see the SHA Hash
+  => writing image sha256:59713d9f1ca50f228d225c0430cbbf399f8bca1b4a286bbe5823dd0392f1337b       
+
+docker compose logs -f app 
+docker exec -it  v0-sport-booking-app-app-1 sh -c "ls -la /app/lib/lua"
+
+docker exec -it redis-cache redis-cli SCRIPT EXISTS 59713d9f1ca50f228d225c0430cbbf399f8bca1b4a286bbe5823dd0392f1337b 
+
+```
+
+# Redis 
+
+# On-Demand Hydration
+
+When your booking action runs, it checks if the class keys exist in Redis. If they don't, it quickly fetches them from MySQL, saves them to Redis, and then securely fires your Lua script.
 

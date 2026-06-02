@@ -26,7 +26,10 @@ services:
       mysql:
         condition: service_healthy
 
+# ----------------------
 # ---- mysql Service ---
+# ----------------------
+
   mysql:
     image: mysql:8.0
     ports:
@@ -46,13 +49,20 @@ services:
       retries: 10
     restart: unless-stopped
 
+# ----------------------
 # ---- Redis Service ---
+# ----------------------
+
   redis-cache:
     image: redis:alpine
     container_name: redis-cache
     ports:
       - "6379:6379"
     restart: unless-stopped
+
+# ----------------------
+# ----- Database -------    
+# ----------------------
 
 volumes:
   mysql_data:

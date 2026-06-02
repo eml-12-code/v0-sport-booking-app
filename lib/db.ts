@@ -15,8 +15,8 @@ const pool = mysql.createPool({
 // INSERT THE CODE RIGHT HERE 
 pool.on('connection', (connection: any) => {
   connection.promise().query("SET time_zone = '+08:00';")
-    .then(() => console.log("🚀 Connection session synchronized to HKT (+08:00)"))
-    .catch((err: any) => console.error("❌ Failed to bind session timezone:", err))
+    .then(() => console.log("🚀 [db.ts -> connection ]  Connection session synchronized to HKT (+08:00)"))
+    .catch((err: any) => console.error("❌ [db.ts -> connection ] Failed to bind session timezone:", err))
 })
 
 export default pool

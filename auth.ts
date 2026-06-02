@@ -49,10 +49,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             'SELECT member_id, username, email, password FROM accounts WHERE email = ? LIMIT 1',
             [username]
           )
-          console.log('🔐 Username' , username )
-          console.log('🔐 Password' ,)
-          console.log('🔐 --- Database Query Result ---')
-          console.log('🔐 Raw rows from DB:', JSON.stringify(rows, null, 2)) 
+          console.log('🔐 [auth.ts -> authConfig ] Username' , username )
+          console.log('🔐 [auth.ts -> authConfig ] Password' ,)
+          console.log('🔐 [auth.ts -> authConfig ]  --- Database Query Result ---')
+          console.log('🔐 [auth.ts -> authConfig ] Raw rows from DB:', JSON.stringify(rows, null, 2)) 
           
           const user = rows[0] 
 
@@ -63,7 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
           }
         } catch (error) {
-          console.error('❌ Login Database Error:', error)
+          console.error('❌ [auth.ts -> authConfig ] Login Database Error:', error)
           return null
         }
         return null
@@ -94,14 +94,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // 2. Log the event in your transactions tracking table
           await pool.execute(
             `INSERT INTO transactions_log 
-              (member_id, action, class_id, token_amount, token_balance_after, created_at)
-             VALUES (?, 'login', NULL, NULL, NULL, NOW())`,
+              (member_id, action, class_id, token_amount, token_balance_after, created_at  )
+             VALUES (?, 'login', NULL, NULL, NULL, NOW() )`,
             [memberId]
           )
-          console.log(`🔐 System Login transaction registered for member ID: ${memberId}`)
+          console.log(`🔐 [auth.ts -> events ] System Login transaction registered for member ID: ${memberId}`)
         }
       } catch (error) {
-        console.error("❌ Failed to commit login event to database:", error)
+        console.error("❌ [auth.ts -> events ] Failed to commit login event to database:", error)
       }
     }
   },
@@ -126,7 +126,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const currentActive = true
           const level = 1
 
-          console.log('account.provider', provider)
+          console.log('🔐 [auth.ts -> callbacks ] account.provider', provider)
 
           // 2. Check if user already exists
           const [rows]: any = await pool.execute(
@@ -136,23 +136,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           // 3. If user doesn't exist, insert them directly into MySQL
           if (rows.length === 0) {
-            console.log(`Creating new OAuth account for: ${email}`);
+            console.log(`🔐 [auth.ts -> callbacks ] Creating new OAuth account for: ${email}`);
+            // --- ELM ----
             await pool.execute(
-              `INSERT INTO accounts (username, email, start_date, status, member_level,oauth_provider ) 
-              VALUES (?, ?, ?, ?, ?, ?)`,
+              `INSERT INTO accounts (username, email, start_date, status, member_level,oauth_provider,token_remain ) 
+              VALUES (?, ?, ?, ?, ?, ?, 30)`,
               [username, email, startDate, currentActive, level, provider ]  
 
             );
           } else {
-            console.log(`OAuth user already exists: ${email}`);
+            console.log(`🔐 [auth.ts -> callbacks ] OAuth user already exists: ${email}`);
             // Optional: Update the last_login timestamp here if you have that column
           }
-          // == ELM == Add transactions_log record
-          // 
-
+          
         } catch (error) {
           // Log the error but don't block the user from logging in
-          console.error('Failed to sync OAuth user to database:', error);
+          console.error('❌  [auth.ts -> callbacks ] Failed to sync OAuth user to database:', error);
         }
       }
       return true; // Return true to allow the user to sign in

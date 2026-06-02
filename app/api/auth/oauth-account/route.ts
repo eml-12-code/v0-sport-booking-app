@@ -33,9 +33,11 @@ export async function POST(request: Request) {
     const currentActive = true
     const memberLevel = 1 // Default member level for OAuth users
 
+   // --- ELM ---- 
+
     const [result] = await pool.execute(
-      `INSERT INTO accounts (username, password, email, start_date, current_active, member_level, oauth_provider) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO accounts (username, password, email, start_date, current_active, member_level, oauth_provider,token_remain) 
+       VALUES (?, ?, ?, ?, ?, ?, ?,200)`,
       [username, null, email, startDate, currentActive, memberLevel, provider]
     )
 

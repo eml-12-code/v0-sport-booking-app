@@ -44,9 +44,12 @@ export async function POST(request: Request) {
     const startDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
     const currentActive = true
 
+
+    // ---- ELM ----- TEST CASE
+
     const [result] = await pool.execute(
-      `INSERT INTO accounts (username, password, email, start_date, status, member_level) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO accounts (username, password, email, start_date, status, member_level, token_remain ) 
+       VALUES (?, ?, ?, ?, ?, ?, 10)`,
       [username, hashedPassword, email, startDate, currentActive, level]
     )
 

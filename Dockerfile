@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# ===== Base Stage =====
+# ========================
+# ===== Base Stage =======
+# ========================
+
 FROM node:22-alpine AS base
 
 RUN apk add --no-cache tzdata
@@ -27,7 +30,10 @@ RUN pnpm --version
 
 RUN pnpm install --no-frozen-lockfile
 
-# ===== Builder Stage =====
+# ========================
+# ===== Builder Stage ====
+# ========================
+
 FROM base AS builder
 WORKDIR /app
 
@@ -37,15 +43,16 @@ RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line in case you want to disable telemetry during the build.
+COPY lib/lua ./lib/lua
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN pnpm build
 
+# ========================
 # ===== Runner Stage =====
+# ========================
+
 FROM base AS runner
 WORKDIR /app
 
@@ -56,11 +63,10 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
-
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+COPY --from=builder --chown=nextjs:nodejs /app/lib/lua ./lib/lua
 
 USER nextjs
 
