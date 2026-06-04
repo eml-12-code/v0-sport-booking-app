@@ -2,19 +2,10 @@
 
 import pool from '@/lib/db'
 import redis from '@/lib/redis'
+import { ClassItem } from "@/types/sport-app"
 import { safeBookClass } from '@/lib/redis'
 import { RowDataPacket } from 'mysql2'
 
-export interface ClassItem {
-  classId: string
-  time: string
-  name: string
-  room: string
-  instructor: string
-  duration: string
-  spots: number
-  color: 'blue' | 'pink' | 'yellow' | 'green'
-}
 
 export interface BookingResult {
   success: boolean
@@ -34,108 +25,119 @@ export interface BookedClassItem {
   spots: number
 }
 
-// ========================
-// Ensures the required Lua script keys exist in Redis memory.
-// If Redis crashed or restarted, this function re-hydrates it from MySQL.
-// ========================
-
-async function hydrateClassCache(classId: string, connection: any): Promise<number> {
-
-  const spotsKey = `class:${classId}:spots`;
-  const costKey = `class:${classId}:cost`;
-
-  // 1. Check if the keys already exist in Redis memory
-  const exists = await redis.exists(spotsKey);
-
-  if (exists === 0) {
-    
-    console.warn(`⚠️ Cache Miss/Redis Flush detected for class ${classId}. Hydrating from MySQL...`);
-
-    // 2. Fetch the true source of truth from your SQL database
-    const [rows] = await connection.execute<RowDataPacket[]>(
-      `SELECT spots, token_cost FROM classes WHERE class_id = ?`,
-      [classId]
-    );
-
-    if (rows.length === 0) throw new Error('Class not found in system database.');
-
-    console.log("📥 [booking.ts -> hydrateClassCache ]")
-    console.table(rows)
-
-    const spots = rows[0].spots;
-    const tokenCost = rows[0].token_cost || 1;
-
-    // 3. Save to Redis so the Lua script can read it instantly (48-hour expiration)
-    await redis.set(spotsKey, spots, 'EX', 172800);
-    await redis.set(costKey, tokenCost, 'EX', 172800);
-
-    return tokenCost;
-  }
-
-  // If already in Redis, fetch the cost directly to return it
-  const cachedCost = await redis.get(costKey);
-  console.log("📥 [booking.ts -> hydrateClassCache ] - cachedCost ", cachedCost)
-  return Number(cachedCost) || 1;
-}
-
 // Helper to generate consistent cache keys
 const getCacheKey = (date: string, location: string) => `classes:${location}:${date}`
 
+// ----------------------------------------------------------------------------------------------------
 // Get classes for a specific date and location with Redis Cache-Aside
+// ----------------------------------------------------------------------------------------------------
+
+
 export async function getClasses(date: Date, location: string): Promise<ClassItem[]> {
+  // 1. Format the Date object into a reliable 'YYYY-MM-DD' string for SQL and Cache keys
+  const selectedDateString = date.toISOString().split('T')[0]
+  
+  // 💡 Include location inside the cacheKey so different areas don't overwrite each other
+  const cacheKey = `classes:list:${location.toLowerCase().replace(/\s+/g, '-')}:${selectedDateString}`
+
   try {
-    console.log("📥 [booking.ts -> getClasses ] Raw date passed to function:", date, "Type of date:", typeof date);
-    const formattedDate = date.toISOString().split('T')[0]
-    
-    console.log("📥 [booking.ts -> getClasses ] Processing SQL search for date:", formattedDate);
-    const cacheKey = getCacheKey(formattedDate, location);
-    console.log("📥 [booking.ts -> getClasses ] cacheKey :", cacheKey);
-    
-    // 1. Try to get data from Redis
+    // 2. Try to read from the string list cache
     const cachedData = await redis.get(cacheKey)
+    
     if (cachedData) {
-      console.log('📥 [booking.ts -> getClasses ] Redis Cache Hit for:', cacheKey)
-      console.table(JSON.parse(cachedData));
-      return JSON.parse(cachedData)
+      console.log(`🎯 [booking.ts -> getClasses] Cache Hit! Reading from list cache: ${cacheKey}`)
+      const parsedClasses = JSON.parse(cachedData)
+
+      // Overwrite static spots with live Redis atomic counters before returning
+      const liveClassesSnapshot = await Promise.all(
+        parsedClasses.map(async (cls: any) => {
+          const classId = cls.classId || cls.class_id
+          const liveSpots = await redis.get(`class:${classId}:spots`)
+          return {
+            ...cls,
+            spots: liveSpots !== null ? Number(liveSpots) : cls.spots
+          }
+        })
+      )
+      return liveClassesSnapshot
     }
 
-    // 2. If not in Redis, fetch from MySQL
-    console.log('📥 [booking.ts -> getClasses ] Redis Cache Miss. Fetching from MySQL...')
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT class_id AS classId, name, date, DATE_FORMAT(time, '%l:%i %p') as time, location, room, instructor, duration, spots, color 
-       FROM classes 
-       WHERE date = ? AND location = ?
-       ORDER BY classes.time ASC`,
-      [formattedDate, location]
+    console.warn(`⏳ [booking.ts -> getClasses] Cache Miss for date ${selectedDateString} at ${location}. Fetching from MySQL...`)
+
+    // 3. MySQL Query matching your signature's date and location parameters
+    const [rows] = await pool.execute<RowDataPacket[]>( // Using your global pool instance
+      `SELECT 
+        class_id, 
+        name, 
+        date, 
+        time, 
+        room, 
+        instructor, 
+        duration, 
+        spots, 
+        class_size, 
+        color, 
+        token_cost 
+      FROM classes 
+      WHERE DATE(date) = ? AND location = ?
+      ORDER BY time ASC`,
+      [selectedDateString, location]
     )
-    console.log(`💾 [booking.ts -> getClasses ] Data saved to Redis cache: ${cacheKey}`)
-    console.table(rows);
 
-    const classes = rows as ClassItem[]
+    // 4. Transform raw snake_case database records into camelCase ClassItem interfaces
+    const formattedClasses: ClassItem[] = await Promise.all(
+      rows.map(async (row: any) => {
+        const classId = row.class_id
+        const liveSpots = await redis.get(`class:${classId}:spots`)
 
-    // 3. Store in Redis for 1 hour (3600 seconds) if data exists
-    if (classes.length > 0) {
-      await redis.set(cacheKey, JSON.stringify(classes), 'EX', 3600)
-      console.log(`💾 [booking.ts -> getClasses ] Data saved to Redis cache: ${cacheKey}`)
+        return {
+          classId: classId,
+          name: row.name,
+          date: String(row.date),
+          time: String(row.time),
+          room: row.room,
+          instructor: row.instructor,
+          duration: row.duration,
+          spots: liveSpots !== null ? Number(liveSpots) : row.spots,
+          classSize: row.class_size,   // 💡 Properly mapped to your layout specifications
+          color: row.color,
+          tokenCost: row.token_cost,   // 💡 Properly mapped to your layout specifications
+        }
+      })
+    )
+
+    // 5. If entries exist, save them to cache and run your new utility debugger
+    if (formattedClasses.length > 0) {
+      await redis.set(cacheKey, JSON.stringify(formattedClasses), 'EX', 3600) // 1-hour expiration
+      console.log(`💾 [booking.ts -> getClasses] Data saved to Redis cache: ${cacheKey}`)
+      
+      // Invoke your debugger function passing the exact formatted cache key
+      await debugListCacheKey(cacheKey)
     }
 
-    return classes
+    return formattedClasses
+
   } catch (error) {
-    console.error('❌ [booking.ts -> getClasses ] Error fetching classes:', error)
+    console.error(`❌ [booking.ts -> getClasses] Failed to load classes array list:`, error)
     return []
   }
 }
 
+
+
+// ----------------------------------------------------------------------------------------------------
+
 // Get user's booked classes
 export async function getBookedClasses(memberId: number): Promise<BookedClassItem[]> {
-  console.log(`📥 [booking.ts -> getBookedClasses ] - memberId `, memberId)
+  
+  console.log("📥 -- START getBookedClasses ----------------------------- 📥 ")
+  console.log(`📥 [booking.ts -> getBookedClasses ] Search booking for memberId `, memberId)
 
   if (!memberId || memberId === 0) {
     return []
   }
   
   try {
-    console.log("📥 [booking.ts -> getBookedClasses ] Search booking for memberId", memberId)
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT 
         b.booking_id AS bookingId, 
@@ -146,7 +148,7 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
         c.location,
         c.room, 
         c.instructor, 
-        c.spots
+        c.spots AS spotRemain
        FROM bookings b
        JOIN classes c ON b.class_id = c.class_id
        WHERE b.member_id = ? AND b.booking_status = 'confirmed'
@@ -156,6 +158,8 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
 
     console.log("📥 [booking.ts -> getBookedClasses ] Total Bookings Found:", rows.length, " for Member ID ", memberId);
     console.table(rows); 
+ 
+    console.log("📥 -- END  getBookedClasses ----------------------------- 📥 ")
 
     return rows.map((row) => ({
       bookingId: String(row.bookingId),
@@ -168,19 +172,29 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
       location: String(row.location),
       spots: Number(row.spots ?? 0),
     }))
+
   } catch (error) {
     console.error('❌ [booking.ts -> getBookedClasses ] Error fetching booked classes:', error)
     return []
   }
 }
 
-// Toggle booking for a class and invalidate relevant cache
+// --- Toggle booking for a class and invalidate relevant cache
+
 export async function toggleBooking(classId: string, memberId: number): Promise<BookingResult> {
+
+  console.log("📥 -- START   toggleBooking ------------------------------------------------------------------------- 📥 ")
   console.log("📥 [booking.ts -> toggleBooking ] memberId --- classId >", memberId, "---", classId);
 
   if (!memberId || memberId === 0) {
     return { success: false, message: 'Please log in to complete your booking.' };
   }
+
+  const userTokensKey = `user:${memberId}:tokens`
+  const spotsKey = `class:${classId}:spots`
+  const classCostKey = `class:${classId}:cost`
+  const bookedSetKey = `class:${classId}:booked`
+  const queueListKey = `class:${classId}:queue`
 
   const connection = await pool.getConnection();
 
@@ -191,8 +205,8 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
     // 2. Hydrate Applicant's tokens into Redis if missing (Ensures script has accurate balance data)
     await ensureUserTokensCached(String(memberId), connection);
 
-    // 3. Pre-fetch and warm up the next user in the queue to bypass cache-drift blocks
-    const nextQueuedUser = await redis.lindex(`class:${classId}:waiting_queue`, 0);
+    // 3. ⚠️ FIXED: Pre-fetch key updated from 'waiting_queue' to 'queue' to match your unified naming scheme
+    const nextQueuedUser = await redis.lindex(`class:${classId}:queue`, 0);
     if (nextQueuedUser) {
       await ensureUserTokensCached(nextQueuedUser, connection); 
     }
@@ -203,13 +217,43 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
       [classId, memberId]
     );
 
+    // 💡 NEW: Fetch target class metadata parameters needed to compile your precise list cache eviction key
+    const [classMetaRows]: any = await connection.execute(
+      `SELECT date, location FROM classes WHERE class_id = ? LIMIT 1`,
+      [classId]
+    );
+    
+    if (!classMetaRows || classMetaRows.length === 0) {
+      throw new Error("Target class layout context parameters could not be found.");
+    }
+
+    // Safely structure formatting parameters (Outputs: 'YYYY-MM-DD' and 'Hong Kong')
+    const classLocation = classMetaRows[0].location;
+    const rawDate = new Date(classMetaRows[0].date);
+    const classDateString = rawDate.toISOString().split('T')[0];
+
     // Evaluate intent: If an entry exists we route to CANCEL, otherwise BOOK
     const actionType: 'BOOK' | 'CANCEL' = existing.length > 0 ? 'CANCEL' : 'BOOK';
     console.log(`📥 [booking.ts -> toggleBooking] Action evaluated as: ${actionType}`);
 
     // 5. Fire the atomic multi-action Lua booking engine transaction
     const luaResult = await safeBookClass(String(memberId), classId, actionType);
-    console.log("📥 [booking.ts -> toggleBooking ] Engine return payload:", luaResult);
+
+    // ---- Add Debug & Eviction -----
+    // 💡 This executes right after the Lua script alters Redis data, removing outdated list caches
+    if (luaResult && (
+      luaResult.status === "CONFIRMED" || 
+      luaResult.status === "CANCEL_SUCCESSFUL" || 
+      luaResult.status === "CANCEL_WITH_WAITLIST_UPGRADE"
+    )) {
+      // Compiles exact cache string format: classes:list:hong-kong:YYYY-MM-DD
+      const staleCacheKey = `classes:list:${classLocation.toLowerCase().replace(/\s+/g, '-')}:${classDateString}`;
+      
+      await redis.del(staleCacheKey);
+      console.log(`🧹 [booking.ts -> toggleBooking] Evicted stale list cache: ${staleCacheKey}`);
+    }
+
+    console.log("🔍 [booking.ts -> toggleBooking ] -- Step 6")
 
     // 6. Sync decisions back to MySQL and verify Redis token counts remain matching
     const result = await syncLuaResultToMySQL(connection, luaResult, classId, memberId, tokenCost);
@@ -222,6 +266,9 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
     connection.release();
   }
 }
+
+
+// ----------------
 
 /**
  * Standard Cache Lazy-Loader for Token Balances
@@ -271,6 +318,13 @@ async function syncLuaResultToMySQL(
   tokenCost: number
 ): Promise<BookingResult> {
 
+
+  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] classId   " ,    classId )
+  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] memberId  " ,   memberId )
+  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] luaResult " ,  luaResult )
+  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] tokenCost " ,  tokenCost )
+
+  
   // 1. Parse flat Redis response arrays into a clean object
   const response = parseRedisResponse(luaResult);
   const status = response.status;
@@ -325,7 +379,8 @@ async function syncLuaResultToMySQL(
       
       // 🔥 UPDATED: Pass token_balance_after column (second to last parameter)
       await connection.execute(
-        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, action, token_amount, token_balance_after, created_at) 
+        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
+                 action, token_amount, token_balance_after, created_at) 
          VALUES (?, ?, ?, ?, ?, ?, ?, 'cancel', ?, ?, NOW())`,
         [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, -tokenCost, balanceAfterCancel]
       );
@@ -512,5 +567,168 @@ export async function testLuaBookingEngine(
 }
 
 
+
+// ========================
+// Ensures the required Lua script keys exist in Redis memory.
+// If Redis crashed or restarted, this function re-hydrates it from MySQL.
+// ========================
+
+
+
+async function hydrateClassCache(classId: string, connection: any): Promise<number> {
+
+  console.log("📥 -- START hydrateClassCache ------------------------------ 📥 ")
+
+  const spotsKey = `class:${classId}:spots`;
+  const costKey = `class:${classId}:cost`;
+  const bookedSetKey = `class:${classId}:booked`;
+  const queueListKey = `class:${classId}:queue`; 
+
+  // 1. Check if the keys already exist in Redis memory
+  const exists = await redis.exists(spotsKey);
+
+  if (exists === 0) {
+    
+    console.warn(`⚠️ -- Cache Miss/Redis Flush detected for class ${classId}. Hydrating from MySQL...`);
+
+    // 2. Fetch the true source of truth from your SQL database
+
+    const [classRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT spots, token_cost FROM classes WHERE class_id = ?`,
+      [classId]
+    );
+
+    if (classRows.length === 0) throw new Error('Class not found in system database.');
+
+    console.log("📥 [booking.ts -> hydrateClassCache ]")
+    console.table(classRows)
+
+
+    const initialSpots = classRows[0].spots;
+    const tokenCost = classRows[0].token_cost || 1;
+
+
+    console.log("📥 [booking.ts -> hydrateClassCache ] initialSpots ", initialSpots)
+    console.log("📥 [booking.ts -> hydrateClassCache ] tokenCost ", tokenCost)
+
+    // 3. Fetch existing confirmed bookings to rebuild the Redis Set snapshot
+    const [bookingRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT member_id FROM bookings WHERE class_id = ? AND booking_status = 'confirmed'`,
+      [classId]
+    );
+
+    console.log ( "📥 10 [booking.ts -> hydrateClassCache ] bookingRows ")
+    console.table (bookingRows)
+
+    // 4. Fetch existing waitlisted users to rebuild the Redis Queue List snapshot
+    const [waitlistRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT member_id FROM bookings WHERE class_id = ? AND booking_status = 'waiting' ORDER BY booked_at ASC`,
+      [classId]
+    );
+
+    console.log ( "📥 [booking.ts -> hydrateClassCache ] waitlistRows ")
+    console.table (waitlistRows)
+
+    // 5. Save to Redis so the Lua script can read it instantly (48-hour expiration)
+    await redis.set(spotsKey, initialSpots, 'EX', 172800);
+    await redis.set(costKey, tokenCost, 'EX', 172800);
+
+    // Hydrate Confirmed Booking Set
+    if (bookingRows.length > 0) {
+      const memberIds = bookingRows.map(row => String(row.member_id));
+      await redis.sadd(bookedSetKey, ...memberIds);
+      await redis.expire(bookedSetKey, 172800);
+    }
+
+    // Hydrate Waiting List Queue
+    if (waitlistRows.length > 0) {
+      const queuedIds = waitlistRows.map(row => String(row.member_id));
+      await redis.rpush(queueListKey, ...queuedIds);
+      await redis.expire(queueListKey, 172800);
+    }
+
+    console.log(`✅ [hydrateClassCache] Cache built successfully for class ${classId}. Spots: ${initialSpots}, Booked: ${bookingRows.length}, Waitlist: ${waitlistRows.length}`);
+
+    console.log("📥 -- END   hydrateClassCache ------------------------------ 📥 ")
+    return tokenCost;
+  }
+
+  // If already in Redis, fetch the cost directly to return it
+  const cachedCost = await redis.get(costKey);
+  console.log("📥 [booking.ts -> hydrateClassCache ] - cachedCost ", cachedCost)
+  return Number(cachedCost) || 1;
+}
+
+
+// --
+// -- Utility to read, parse, and visually print the contents of a list cache key
+// --
+
+async function debugListCacheKey(cacheKey: string): Promise<void> {
+  try {
+    const rawCachedData = await redis.get(cacheKey)
+    
+    if (rawCachedData) {
+      const parsedCacheArray = JSON.parse(rawCachedData)
+      
+      console.log(`\n🔍 ===== [REDIS CACHE KEY READBACK: ${cacheKey}] =====`)
+      console.log(`📦 Total classes cached: ${parsedCacheArray.length}`)
+      
+      // Beautiful console-friendly breakdown layout grid
+      if (Array.isArray(parsedCacheArray)) {
+        console.table(parsedCacheArray.map((c: any) => ({
+          id: c.classId || c.class_id,
+          name: c.name,
+          time: c.time,
+          spots: c.spots,
+          size: c.classSize || c.class_size,
+          cost: c.tokenCost || c.token_cost
+        })))
+      } else {
+        console.log("📄 Raw Object Contents:", parsedCacheArray)
+      }
+      console.log("========================================================\n")
+    } else {
+      console.log(`⚠️ [debugListCacheKey] Cache key "${cacheKey}" returned empty or null.`)
+    }
+  } catch (error) {
+    console.error(`❌ Failed to read back the saved Redis cache key (${cacheKey}):`, error)
+  }
+}
+
+
+
+// ------------
+// Utility to print the live snapshot state of Redis keys after a mutation event
+// ------------
+
+async function debugRedisBookingKeys(keys: {
+  userTokensKey: string
+  spotsKey: string
+  classCostKey: string
+  bookedSetKey: string
+  queueListKey: string
+}) {
+  try {
+    // Fetch values from Redis concurrently
+    const [tokens, spots, cost, bookedMembers, waitlistLength] = await Promise.all([
+      redis.get(keys.userTokensKey),
+      redis.get(keys.spotsKey),
+      redis.get(keys.classCostKey),
+      redis.smembers(keys.bookedSetKey), // Fetch entire Set array list
+      redis.llen(keys.queueListKey)       // Fetch list array size
+    ])
+
+    console.log("\n====== 🔴 [REDIS CACHE SNAPSHOT LOG] ======")
+    console.log(`🔑 Key [User Tokens] (${keys.userTokensKey}):`, tokens ?? "NULL")
+    console.log(`🔑 Key [Class Spots] (${keys.spotsKey}):`, spots ?? "NULL")
+    console.log(`🔑 Key [Class Cost]   (${keys.classCostKey}):`, cost ?? "1 (Default)")
+    console.log(`🔑 Key [Booked Set]   (${keys.bookedSetKey}):`, bookedMembers)
+    console.log(`🔑 Key [Waitlist Len] (${keys.queueListKey}):`, waitlistLength)
+    console.log("============================================\n")
+  } catch (error) {
+    console.error("❌ Failed to output Redis debug logs:", error)
+  }
+}
 
 

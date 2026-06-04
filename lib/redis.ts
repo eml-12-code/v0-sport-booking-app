@@ -36,7 +36,7 @@ async function loadLuaScript(): Promise<string> {
     }
 
     const scriptContent = fs.readFileSync(scriptPath, 'utf8')
-    console.log(`🚀 Lua script: ${scriptContent}`)
+    // console.log(`🚀 Lua script: ${scriptContent}`)
 
     
     bookingScriptSha = await redis.script('LOAD', scriptContent)

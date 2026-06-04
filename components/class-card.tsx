@@ -1,9 +1,11 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import { ClassItem } from "@/types/sport-app"
 import { Button } from "@/components/ui/button"
 import { toggleBooking } from "@/app/actions/booking"
 import { useState, useEffect, useTransition } from "react"
+
 import {
   Dialog,
   DialogContent,
@@ -13,17 +15,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 
-export interface ClassItem {
-  classId: string
-  time: string       // E.g., "10:00 AM" or "14:30"
-  date: string       // E.g., "2026-05-22"
-  name: string
-  room: string
-  instructor: string
-  duration: string
-  spots: number
-  color: "blue" | "pink" | "yellow" | "green"
-}
 
 interface ClassCardProps {
   classItem: ClassItem
@@ -47,6 +38,7 @@ const iconColorClasses = {
 }
 
 const classIcons: Record<string, JSX.Element> = {
+
   HIIT: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -80,6 +72,7 @@ const classIcons: Record<string, JSX.Element> = {
 }
 
 export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: ClassCardProps) {
+
   const [isPending, startTransition] = useTransition()
   const [hasPassed, setHasPassed] = useState(false)
   
@@ -91,9 +84,13 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
   const icon = classIcons[classItem.name] || classIcons.HIIT
 
   // Live interval time-expiration check runner hook
+
   useEffect(() => {
+
   function checkTimeExpiration() {
+
     try {
+
       if (!classItem || !classItem.time) {
         setHasPassed(false)
         return
@@ -102,23 +99,28 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
       let year: number, month: number, day: number;
 
       // 🟢 UNIVERSAL NORMALIZER: Force whatever format classItem.date is into a clean Date object
+      
       const safeDateObject = classItem.date ? new Date(classItem.date) : new Date();
 
       if (isNaN(safeDateObject.getTime())) {
+
         // Safe Fallback if parsing fails: Use current live date variables
         const fallback = new Date()
         year = fallback.getFullYear()
         month = fallback.getMonth() + 1
         day = fallback.getDate()
+      
       } else {
+      
         // Extract accurate numeric parameters directly from our verified date object instance
         year = safeDateObject.getFullYear()
         month = safeDateObject.getMonth() + 1 // JavaScript months are 0-11, add 1 to normalize
         day = safeDateObject.getDate()
+      
       }
 
       const timeStr = classItem.time.trim().toUpperCase()
-      // console.log("⏱️ ClassCard Verification Fixed:", classItem.name, year, month, day, timeStr)
+      console.log("⏱️ [ class-card.tsx -> ClassCard Verification Fixed ]", classItem.name, year, month, day, timeStr)
 
       // FIXED REGEX: Anchor set correctly to string end '$' instead of literal character '\$'
       const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
@@ -140,7 +142,9 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
       
       // Update our reactive component layout status tracking variable
       setHasPassed(new Date() > exactClassDateTime)
+    
     } catch (e) {
+
       console.error("Failed to parse combined class deadline time:", e)
     }
   }
@@ -155,19 +159,40 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
 
   // Core execution handler used for both standard booking and confirmed cancellation triggers
   const executeBookingToggle = () => {
+
     startTransition(async () => {
-      console.log(" ClassCard ->", memberId, "<")
+
+      console.log(" [class-card.tsx -> ClassCard ] -> ", memberId, "<")
       const result = await toggleBooking(classItem.classId, memberId)
       
       if (result.success && result.isBooked !== undefined) {
+
         onBookingChange(classItem.classId, result.isBooked)
         if (result.isBooked) {
+
           setShowSuccessDialog(true)
         }
-      } else if (!result.success) {
+      } 
+
+      // ---- Intercept the Lua waitlist return flag cleanly
+      //    
+      else if (!result.success && result.message === "WAITING_QUEUE") {
+
+        // Opt A: Trigger a specific workflow alert 
+        onBookingChange(classItem.classId, false) 
+        classItem.spots = 0 
+      
+        setErrorMessage("This class just filled up! You have been placed on the Waiting Queue.")
+        setShowErrorDialog(true)
+      
+      }
+      // Standard error catches (like insufficient tokens, database disconnects, etc.)
+      else if (!result.success) {
+
         setErrorMessage(result.message || "Something went wrong.")
         setShowErrorDialog(true)
       }
+
     })
   }
 
@@ -183,62 +208,95 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
     }
   }
 
+  const isFull = classItem.spots <= 0 // 💡 Define this here first!
+
   const buttonText = hasPassed 
-    ? "Passed" 
-    : isPending 
-      ? "Processing..." 
-      : isBooked 
-        ? "Cancel Booking" 
-        : "Book Now"
+      ? "Passed"
+      : isPending
+      ? "Processing..."
+      : isBooked
+      ? "Cancel Booking"
+      : isFull
+      ? "On Waiting" // 💡 Changed from "Full" to "On Waiting"
+      : "Book Now"
 
   return (
-    <>
-      {/* Main card grid container with reactive conditional dimming states */}
-      <div className={cn(
-        "rounded-2xl p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02]",
-        colorClasses[classItem.color],
-        hasPassed && "opacity-50 saturate-50 pointer-events-none select-none shadow-none scale-100 hover:scale-100 hover:shadow-none"
-      )}>
-        <div className="flex items-start justify-between">
-          <div className="flex gap-3">
-            <div className={cn(
-              "w-12 h-12 rounded-xl bg-white/60 flex items-center justify-center",
-              iconColorClasses[classItem.color]
-            )}>
-              {icon}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-muted-foreground">{classItem.time}</span>
-              <h3 className="text-base font-bold text-foreground">
-                {classItem.name} {isBooked && !hasPassed && "✓"}
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {classItem.room} • {classItem.instructor}
-              </p>
-            </div>
+  <>
+    <div className={cn(
+      "rounded-2xl p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02]",
+      colorClasses[classItem.color],
+      hasPassed && "opacity-50 saturate-50 pointer-events-none select-none shadow-none scale-100 hover:scale-100 hover:shadow-none"
+    )}>
+      <div className="flex items-start justify-between">
+        <div className="flex gap-3">
+          <div className={cn(
+            "w-12 h-12 rounded-xl bg-white/60 flex items-center justify-center",
+            iconColorClasses[classItem.color]
+          )}>
+            {icon}
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <span className="text-xs font-medium text-muted-foreground">{classItem.duration}</span>
-            <span className="text-xs text-muted-foreground">{classItem.spots} spots</span>
+          <div className="flex flex-col">
+            <span className="text-xs font-medium text-muted-foreground">{classItem.time}</span>
+            <h3 className="text-base font-bold text-foreground">
+              {classItem.name} {isBooked && !hasPassed && "✓"}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {classItem.room} • {classItem.instructor}
+            </p>
           </div>
         </div>
-        <div className="mt-3 pt-3 border-t border-black/5">
-          <Button
-            onClick={handleButtonClick}
-            disabled={isPending || hasPassed} 
-            className={cn(
-              "w-full h-9 rounded-xl font-semibold text-sm transition-colors",
-              hasPassed
-                ? "!bg-gray-400 !text-white opacity-100 cursor-not-allowed pointer-events-none" 
-                : isBooked 
-                  ? "bg-red-500 text-white hover:bg-red-600" 
-                  : "bg-foreground text-background hover:bg-foreground/90"
-            )}
-          >
-            {buttonText}
-          </Button>
+        
+        {/* Right Info Section */}
+        <div className="flex flex-col items-end gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">{classItem.duration}</span>
+
+          {/* 💡 Updated: Renders as "Remaining / Total Capacity" or "Full" */}
+          <span className={cn(
+            "text-xs font-semibold px-2 py-0.5 rounded-md", 
+            isFull 
+              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" 
+              : "text-muted-foreground bg-black/5 dark:bg-white/5"
+          )}>
+            {isFull 
+              ? `0 / ${classItem.classSize} spots (Full)` 
+              : `${classItem.spots} / ${classItem.classSize} available`}
+          </span>
+
+          {/* 💡 Injected Custom Token Cost Readout Indicator */}
+
+          {classItem.tokenCost !== undefined && (
+            <span className="text-xs bg-white/80 dark:bg-black/20 px-2 py-0.5 rounded-full font-bold text-foreground">
+              🪙 {classItem.tokenCost} {classItem.tokenCost === 1 ? "Token" : "Tokens"}
+            </span>
+          )}
+          
+        
+          {/* 💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡 */}
+
         </div>
       </div>
+
+      {/* Button CTA Action container block */}
+      <div className="mt-3 pt-3 border-t border-black/5">
+        <Button
+          onClick={handleButtonClick}
+          // 💡 Button remains click-enabled if booked, allowing users to cancel even when full
+          disabled={isPending || hasPassed} 
+          className={cn(
+            "w-full h-9 rounded-xl font-semibold text-sm transition-colors",
+            hasPassed
+              ? "!bg-gray-400 !text-white opacity-100 cursor-not-allowed pointer-events-none"
+              : isBooked
+              ? "bg-red-500 text-white hover:bg-red-600"
+              : isFull
+              ? "bg-amber-500 text-white hover:bg-amber-600 cursor-pointer" // 💡 Changed cursor to show it's clickable
+              : "bg-foreground text-background hover:bg-foreground/90"
+          )}
+        >
+          {buttonText}
+        </Button>
+      </div>
+    </div>
 
       {/* 1. ERROR DIALOG POPUP */}
       <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>

@@ -2,8 +2,7 @@
 //                   ┌──────────────────────┐
 //                   │   auth.config.js     │ Base configurations, middleware rules
 //                   └──────────┬───────────┘
-//   
-//                            │ (Extended by)
+//                              │ (Extended by)
 //                              ▼
 // ┌────────────────┐ 🧩 ┌──────────────┐ 💾 ┌──────────────┐
 // │ CLIENT SCREENS │ ◄─►│   auth.js    │ ◄─►│  src/lib/db  │ MySQL Connection Pool
@@ -15,6 +14,43 @@
 // │ profile-screen │    │  account.ts  │ Server Action queries profile info
 // └────────────────┘    └──────────────┘
 // 
+
+/*
+Architectural Breakdown
+
+Authentication Providers: 
+It merges base configurations (authConfig) and handles two login types. 
+
+It provides a local fallback Demo mode (checking against environment variables in development). 
+For production, it implements a Credentials provider that verifies user emails and passwords against 
+a MySQL accounts table using encrypted bcrypt comparisons.
+
+Database Synchronization (OAuth): 
+The signIn callback intercepts social logins (e.g., Google or GitHub). 
+If a matching email does not exist in the database, it automatically provisions 
+a new row in the accounts table with a starting balance of 0 tokens.
+
+
+Audit Logging: 
+The events.signIn block triggers asynchronously upon every successful login, 
+recording an audit entry into a transactions_log table linked to the user's member_id.
+
+
+Role-Based Access (RBAC): 
+It maps administration privileges securely:
+
+jwt Callback: Runs when creating cookies. It sanitizes and hashes (SHA-256) the user's email, 
+comparing it against a comma-separated list of approved hashes in process.env.ADMIN_EMAIL_HASH. 
+It sets a token.isAdmin boolean flag.
+
+session Callback: Forwards this server-side token.isAdmin state onto the frontend 
+session.user.isAdmin layer so client components can read security clearances.
+
+TypeScript Declarations: 
+Module augmentation expands the default NextAuth types (Session and JWT) 
+to explicitly support and validate the custom isAdmin property.
+
+*/
 
 import NextAuth from 'next-auth'
 import crypto from "crypto" 
@@ -72,7 +108,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
 
 
-  //----
+//----
 // 🔥 ADDED EVENTS LAYER: Captures all verified logins automatically
 // If the user does not exist in your MySQL accounts database yet, 
 // it automatically writes a fresh record row.
@@ -146,7 +182,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             );
           } else {
             console.log(`🔐 [auth.ts -> callbacks ] OAuth user already exists: ${email}`);
-            // Optional: Update the last_login timestamp here if you have that column
           }
           
         } catch (error) {
@@ -191,9 +226,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Transports the backend token flag state parameters over onto the 
     // frontend session.user.isAdmin layer so client pages can read user role clearances.
     async session({ session, token }) {
+
       if (session.user) {
+      
         session.user.isAdmin = token.isAdmin === true;
+      
       } else {
+      
         session.user.isAdmin = false;
       }
       return session;

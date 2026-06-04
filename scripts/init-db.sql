@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS classes (
   spots INT NOT NULL,
   class_size INT NOT NULL,
   color ENUM('blue', 'pink', 'yellow', 'green') NOT NULL,
-  
   token_cost INT NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -79,17 +78,17 @@ CREATE TABLE IF NOT EXISTS transactions_log (
 );
 
 -- Insert sample classes for today
-INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, class_size, color, date, location) VALUES
-('HK-1', '06:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 8,8, 'blue', CURDATE(), 'Hong Kong'),
-('HK-2', '07:30:00', 'Yoga', 'Room B2', 'Mike Chen', '60 min', 12,12, 'pink', CURDATE(), 'Hong Kong'),
-('HK-3', '09:00:00', 'Pilates', 'Room C3', 'Emma Wilson', '50 min', 6,6, 'yellow', CURDATE(), 'Hong Kong'),
-('HK-4', '10:30:00', 'Spinning', 'Room D1', 'James Lee', '45 min', 1,1, 'green', CURDATE(), 'Hong Kong'),
-('HK-5', '12:00:00', 'Boxing', 'Room A2', 'Lisa Park', '60 min', 10,10, 'blue', CURDATE(), 'Hong Kong'),
-('HK-6', '14:00:00', 'Strength', 'Room B1', 'David Kim', '55 min', 8,8, 'pink', CURDATE(), 'Hong Kong'),
-('HK-7', '21:00:00', 'Yoga', 'Room C1', 'Amy Rodriguez', '60 min', 14,14, 'yellow', CURDATE(), 'Hong Kong'),
-('HK-8', '22:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
-('HK-9', '23:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong'),
-('HK-10', '23:05:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong');
+INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, class_size, color, date, location, token_cost) VALUES
+('HK-1', '06:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 1,1, 'blue', CURDATE(), 'Hong Kong',3),
+('HK-2', '07:30:00', 'Yoga', 'Room B2', 'Mike Chen', '60 min', 12,12, 'pink', CURDATE(), 'Hong Kong',3),
+('HK-3', '09:00:00', 'Pilates', 'Room C3', 'Emma Wilson', '50 min', 6,6, 'yellow', CURDATE(), 'Hong Kong',3),
+('HK-4', '10:30:00', 'Spinning', 'Room D1', 'James Lee', '45 min', 1,1, 'green', CURDATE(), 'Hong Kong',3),
+('HK-5', '12:00:00', 'Boxing', 'Room A2', 'Lisa Park', '60 min', 10,10, 'blue', CURDATE(), 'Hong Kong',5),
+('HK-6', '14:00:00', 'Strength', 'Room B1', 'David Kim', '55 min', 8,8, 'pink', CURDATE(), 'Hong Kong',1),
+('HK-7', '21:00:00', 'Yoga', 'Room C1', 'Amy Rodriguez', '60 min', 14,14, 'yellow', CURDATE(), 'Hong Kong',2),
+('HK-8', '22:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong',4),
+('HK-9', '23:00:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 5,5, 'green', CURDATE(), 'Hong Kong',2),
+('HK-10', '23:59:00', 'HIIT', 'Room A1', 'Sarah Johnson', '45 min', 1,1, 'green', CURDATE(), 'Hong Kong',2);
 
 -- Insert sample classes for tomorrow
 INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, class_size,color, date, location) VALUES

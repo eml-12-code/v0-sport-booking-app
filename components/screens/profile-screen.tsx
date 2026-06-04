@@ -301,4 +301,3 @@ export function ProfileScreen() {
     </div>
   )
 }
-

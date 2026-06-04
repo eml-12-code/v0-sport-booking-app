@@ -1,37 +1,46 @@
 "use client"
 
 import { ClassCard } from "@/components/class-card"
+import { ClassItem } from "@/types/sport-app"
 
-// 🟢 FIXED: Added optional date string parameter to match the layout object expansion
-interface ClassItem {
-  classId: string
-  time: string
-  date?: string // ◄ Added to clear out the TypeScript property access compilation crash
-  name: string
-  room: string
-  instructor: string
-  duration: string
-  spots: number
-  color: 'blue' | 'pink' | 'yellow' | 'green'
-}
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 interface ClassListProps {
-  classes: ClassItem[]
-  bookedClasses: string[]
-  memberId: number
-  handleBookingChange: (classId: string, isBooked: boolean) => void
-  selectedCalendarDate: Date 
+    classes: ClassItem[]
+    bookedClasses: string[]
+    memberId: number
+    handleBookingChange: (classId: string, isBooked: boolean) => void
+    selectedCalendarDate: Date 
 }
 
 export function ClassList({ 
-  classes, 
-  bookedClasses, 
-  memberId, 
-  handleBookingChange, 
-  selectedCalendarDate 
+    classes, 
+    bookedClasses, 
+    memberId, 
+    handleBookingChange, 
+    selectedCalendarDate 
+
 }: ClassListProps) {
   
-  console.log("🎨 [UI RENDER] Array items length arriving to ClassList:", classes?.length)
+  const router = useRouter() // 💡 Added: Router instance to refresh data
+
+  // 💡 Added: Polling effect that refreshes server data every 10 seconds
+
+  useEffect(() => {
+  
+    const interval = setInterval(() => {
+
+      console.log("🔄 [class-list.tsx -> Polling] Fetching fresh spots data from Redis/MySQL...")
+      router.refresh() 
+
+    }, 10000) // 10000ms = 10 seconds
+
+    return () => clearInterval(interval) // Clean up interval on unmount
+  
+  }, [router])
+
+  console.log("🎨 [class-list.tsx -> UI RENDER] Array items length arriving to ClassList:", classes?.length)
 
   const fallbackDateString = new Date(selectedCalendarDate || new Date())
     .toLocaleDateString("en-CA") // Generates reliable 'YYYY-MM-DD' strings
