@@ -128,3 +128,41 @@ docker exec -it redis-cache redis-cli SCRIPT EXISTS 59713d9f1ca50f228d225c0430cb
 
 When your booking action runs, it checks if the class keys exist in Redis. If they don't, it quickly fetches them from MySQL, saves them to Redis, and then securely fires your Lua script.
 
+
+
+# Lua Script
+
+The provided Lua script is a Redis-based atomic booking engine. It manages two main processes: Booking (taking a spot) and Cancellation (freeing a spot, which may trigger a waitlist promotion).
+Because it uses Redis EVAL (scripting), the entire logic for each action executes as a single transaction, ensuring data consistency (e.g., preventing two people from taking the last spot simultaneously).
+Flow Chart Summary
+Below is the logical flow of the bookingEngine.lua script.
+1. Pathway A: The "CANCEL" Action
+If the action is CANCEL, the script follows this logic:
+• Check Booked Status: Is the userId in the bookedSetKey?
+• Yes:
+1.	Remove user from the bookedSetKey.
+2.	Refund tokens to the user (INCRBY user balance).
+3.	Check Waitlist (queueListKey):
+• If waitlist has people:
+• Get the next user.
+• Can they afford the class?
+• Yes: Move them to bookedSetKey, deduct their tokens, and return success.
+• No: Re-add them to the queue and increment available spots (spotsKey).
+• If waitlist is empty: Increment available spots.
+• No (Not booked):
+• Check if the user is in the queueListKey.
+• If found, remove them from the queue.
+• If not found, return an error.
+2. Pathway B: The "BOOK" Action
+If the action is BOOK, the script follows this logic:
+1.	Validation:
+• Does the user have enough tokens? If No, exit with error.
+• Is the user already booked? If Yes, exit with error.
+2.	Capacity Check:
+• Are there spots available (spotsKey > 0)?
+• No: Add user to queueListKey and return "WAITING_QUEUE".
+• Yes:
+1.	Decrement available spots (DECR spotsKey).
+2.	Deduct tokens from user.
+3.	Add user to bookedSetKey.
+4.	Return "CONFIRMED".
