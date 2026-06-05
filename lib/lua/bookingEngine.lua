@@ -43,8 +43,8 @@ if action == "CANCEL" then
                             "message", "Cancelled. Spot passed to waitlist." 
                         }
                     else
-                        -- If they cannot afford it, put them back at the front and open the spot up publically
-                        redis.call('LPUSH', queueListKey, nextQueuedUser)
+                        -- If they cannot afford it, put them back at the end and open the spot up publically
+                        redis.call('RPUSH', queueListKey, nextQueuedUser)
                         redis.call('INCR', spotsKey)
                         
                         -- 💡 FIX: Return immediately so your system knows the spot opened up to the public
