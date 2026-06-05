@@ -136,7 +136,8 @@ The provided Lua script is a Redis-based atomic booking engine. It manages two m
 Because it uses Redis EVAL (scripting), the entire logic for each action executes as a single transaction, ensuring data consistency (e.g., preventing two people from taking the last spot simultaneously).
 Flow Chart Summary
 Below is the logical flow of the bookingEngine.lua script.
-1. Pathway A: The "CANCEL" Action
+
+## 1. Pathway A: The "CANCEL" Action
 If the action is CANCEL, the script follows this logic:
 • Check Booked Status: Is the userId in the bookedSetKey?
 • Yes:
@@ -153,7 +154,7 @@ If the action is CANCEL, the script follows this logic:
 • Check if the user is in the queueListKey.
 • If found, remove them from the queue.
 • If not found, return an error.
-2. Pathway B: The "BOOK" Action
+## 2. Pathway B: The "BOOK" Action
 If the action is BOOK, the script follows this logic:
 1.	Validation:
 • Does the user have enough tokens? If No, exit with error.
