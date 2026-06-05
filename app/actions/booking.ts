@@ -238,6 +238,11 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
 
     // 5. Fire the atomic multi-action Lua booking engine transaction
     const luaResult = await safeBookClass(String(memberId), classId, actionType);
+    console.log("📥 [booking.ts -> toggleBooking ] Raw Engine return payload:", luaResult);
+
+    // ------ ELM 
+    const luaResultRaw = luaResult;
+    let _luaResult = { status: "", message: "" };
 
     // ---- Add Debug & Eviction -----
     // 💡 This executes right after the Lua script alters Redis data, removing outdated list caches
@@ -318,7 +323,8 @@ async function syncLuaResultToMySQL(
   tokenCost: number
 ): Promise<BookingResult> {
 
-
+  console.log ("--- syncLuaResultToMySQL -----------------------------------")
+  
   console.log ("📥 [booking.ts -> syncLuaResultToMySQL] classId   " ,    classId )
   console.log ("📥 [booking.ts -> syncLuaResultToMySQL] memberId  " ,   memberId )
   console.log ("📥 [booking.ts -> syncLuaResultToMySQL] luaResult " ,  luaResult )
@@ -330,11 +336,18 @@ async function syncLuaResultToMySQL(
   const status = response.status;
   const message = response.message;
 
+  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] status " ,  status )
+  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] message " ,  message )
+  
   // 2. Short-circuit immediately for early exits (Saves database transaction overhead)
   if (status === "ERROR_EXIT") {
+
+    console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  ERROR_EXIT `);
     return { success: false, message };
   }
   if (status === "REJECTED_DUPLICATE") {
+
+    console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  REJECTED_DUPLICATE `);
     return { success: false, message: message || "You are already booked for this session." };
   }
 
@@ -358,6 +371,9 @@ async function syncLuaResultToMySQL(
     // ========================================================
       
       if (status === "CANCEL_SUCCESSFUL") {
+
+      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CANCEL_SUCCESSFUL `);
+
       await connection.execute(
         `UPDATE bookings SET booking_status = 'cancelled' WHERE class_id = ? AND member_id = ? AND booking_status = 'confirmed'`,
         [classId, memberId]
@@ -393,6 +409,10 @@ async function syncLuaResultToMySQL(
     // -------------------
 
     if (status === "CANCEL_WAITLIST_SUCCESSFUL") {
+
+      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CANCEL_WAITLIST_SUCCESSFUL `);
+
+
       await connection.execute(
         `UPDATE bookings SET booking_status = 'cancelled' WHERE class_id = ? AND member_id = ? AND booking_status = 'waiting'`,
         [classId, memberId]
@@ -434,6 +454,10 @@ async function syncLuaResultToMySQL(
     // ========================================================
     
     if (status === "CONFIRMED") {
+
+      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CONFIRMED `);
+
+      
       await connection.execute(
         `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed') ON DUPLICATE KEY UPDATE booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
         [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, memberId]
@@ -468,10 +492,53 @@ async function syncLuaResultToMySQL(
       return { success: true, message: "Class booked successfully!", isBooked: true };
     }
 
+    // -------
+
+    if (status === "WAITING_QUEUE") {
+        console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  WAITING_QUEUE `);
+        
+        // 💡 OPTIONAL: Execute a background query to log this waitlist state into your MySQL DB
+        try {
+        //  await connection.execute(
+        //    `INSERT INTO bookings (class_id, name, member_id, booking_status, booked_at) 
+        //     VALUES (?, ?, ?, 'waiting', NOW()) 
+        //     ON DUPLICATE KEY UPDATE booking_status = 'waiting'`,
+        //    [classId, classMeta.name, memberId]
+        //  );
+
+            await connection.execute(
+               `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting') 
+                       ON DUPLICATE KEY UPDATE booking_status = 'waiting', booked_at = CURRENT_TIMESTAMP`,
+        [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, memberId]
+      );
+    
+          await connection.execute(
+            `INSERT INTO transactions_log 
+              (member_id, action, class_id, token_amount, token_balance_after, created_at) 
+             VALUES (?, 'waitlist_join', ?, NULL, NULL, NOW())`,
+            [memberId, classId]
+          );
+
+        } catch (dbError) {
+          console.error("⚠️ Failed to sync waitlist state entry to MySQL:", dbError);
+          // Do not throw here—Redis is your primary source of truth for the queue, keep running!
+        }
+
+        // Return success: false but with the matching WAITING_QUEUE message string
+        return { 
+          success: false, 
+          message: "WAITING_QUEUE" 
+        };
+      }
+
+
 
     // -------
 
     if (status === "CONFIRMED_QUEUE_UPGRADE") {
+      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CONFIRMED_QUEUE_UPGRADE `);
+
       const upgradedUser = Number(response.upgradedUser);
 
       await connection.execute(
@@ -547,6 +614,7 @@ export async function testLuaBookingEngine(
 
     const result = await safeBookClass(userId, classId, 'BOOK');
     console.log('🎉 [LUA TEST EXECUTION RESULT]:', result);
+
 
     const endingTokens = await redis.get(userTokensKey);
     const endingSpots = await redis.get(spotsKey);

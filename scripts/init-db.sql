@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   room VARCHAR(50) NOT NULL,
   member_id VARCHAR(100) NOT NULL DEFAULT 'anonymous',
   booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  booking_status ENUM('confirmed', 'cancelled') DEFAULT 'confirmed',
+  booking_status ENUM('confirmed', 'cancelled','waiting') DEFAULT 'confirmed',
   FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
   UNIQUE KEY unique_booking (class_id, member_id, booking_status)
 );
