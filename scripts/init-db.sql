@@ -2,38 +2,82 @@
 CREATE DATABASE IF NOT EXISTS sport_booking;
 USE sport_booking;
 
--- Classes table to store available classes
-CREATE TABLE IF NOT EXISTS classes (
-  class_id VARCHAR(36) PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  date DATE NOT NULL,
-  time TIME NOT NULL,
-  location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
-  room VARCHAR(50) NOT NULL,
-  instructor VARCHAR(100) NOT NULL,
-  duration VARCHAR(20) NOT NULL,
-  spots INT NOT NULL,
-  class_size INT NOT NULL,
-  color ENUM('blue', 'pink', 'yellow', 'green') NOT NULL,
-  token_cost INT NOT NULL DEFAULT 1,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 1. Create the Core Current-State Bookings Table
+CREATE TABLE IF NOT EXISTS bookings (  
+  
+    booking_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id VARCHAR(36) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    date DATE NOT NULL,
+    time TIME NOT NULL,
+    location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
+    room VARCHAR(50) NOT NULL,
+    member_id VARCHAR(100) NOT NULL DEFAULT 'anonymous',
+    booked_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, -- 🟢 FIXED: Removed "YES" syntax bug
+    booking_status ENUM('confirmed', 'cancelled', 'waiting') DEFAULT 'confirmed',
+    
+    -- Composite index to instantly load a user's dashboard schedules
+    INDEX idx_bookings_member_status (member_id, booking_status, date),
+    
+    -- Composite index to let Lua scripts process waitlists sorted by oldest booking time first
+    INDEX idx_bookings_queue_sort (class_id, booking_status, booked_at)
 );
 
--- Bookings table to store user bookings
-CREATE TABLE IF NOT EXISTS bookings (
-  booking_id INT AUTO_INCREMENT PRIMARY KEY,
-  class_id VARCHAR(36) NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  date DATE NOT NULL,
-  time TIME NOT NULL,
-  location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
-  room VARCHAR(50) NOT NULL,
-  member_id VARCHAR(100) NOT NULL DEFAULT 'anonymous',
-  booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  booking_status ENUM('confirmed', 'cancelled','waiting') DEFAULT 'confirmed',
-  FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
-  UNIQUE KEY unique_booking (class_id, member_id, booking_status)
+-- 2. Create the Immutable Audit Trail Transaction Logs Table
+CREATE TABLE IF NOT EXISTS transactions_log (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    booking_id INT DEFAULT NULL, 
+    action VARCHAR(36) DEFAULT NULL, 
+    status_before VARCHAR(20) DEFAULT NULL, 
+    status_after VARCHAR(20) DEFAULT NULL,  
+    member_id VARCHAR(100) DEFAULT NULL, 
+    class_id VARCHAR(36) DEFAULT NULL,
+    name VARCHAR(100) DEFAULT NULL,
+    date DATE DEFAULT NULL,
+    time TIME DEFAULT NULL,
+    location VARCHAR(100) DEFAULT NULL,
+    room VARCHAR(50) DEFAULT NULL,
+    token_amount INT DEFAULT NULL, 
+    token_balance_after INT DEFAULT NULL, 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Index to quickly pull a member's complete transactional accounting log history
+    INDEX idx_logs_member_history (member_id, created_at)
 );
+
+
+-- Classes table to store available classes
+CREATE TABLE IF NOT EXISTS classes (
+   class_id VARCHAR(36) PRIMARY KEY,
+   name VARCHAR(100) NOT NULL,
+   date DATE NOT NULL,
+   time TIME NOT NULL,
+   location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
+   room VARCHAR(50) NOT NULL,
+   instructor VARCHAR(100) NOT NULL,
+   duration VARCHAR(20) NOT NULL,
+   spots INT NOT NULL,
+   class_size INT NOT NULL,
+   color ENUM('blue', 'pink', 'yellow', 'green') NOT NULL,
+   token_cost INT NOT NULL DEFAULT 1,
+   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ );
+
+-- Bookings table to store user bookings
+-- CREATE TABLE IF NOT EXISTS bookings (
+--   booking_id INT AUTO_INCREMENT PRIMARY KEY,
+--   class_id VARCHAR(36) NOT NULL,
+--   name VARCHAR(100) NOT NULL,
+--   date DATE NOT NULL,
+--   time TIME NOT NULL,
+--   location VARCHAR(100) NOT NULL DEFAULT 'Hong Kong',
+--   room VARCHAR(50) NOT NULL,
+--   member_id VARCHAR(100) NOT NULL DEFAULT 'anonymous',
+--   booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--   booking_status ENUM('confirmed', 'cancelled','waiting') DEFAULT 'confirmed',
+--   FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+--   UNIQUE KEY unique_booking (class_id, member_id, booking_status)
+-- );
 
 -- Bookings table to store accounts
 CREATE TABLE IF NOT EXISTS accounts (
@@ -61,21 +105,21 @@ CREATE TABLE IF NOT EXISTS contracts (
 
 
 -- transactions_log Table 
-CREATE TABLE IF NOT EXISTS transactions_log (
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  action VARCHAR(36), 
-  member_id INT, 
-  class_id VARCHAR(36), 
-  name VARCHAR(100) NULL,
-  date DATE NULL,
-  time TIME NULL,
-  location VARCHAR(100) NULL,
-  room VARCHAR(50) NULL,
-  token_amount INT, 
-  token_balance_after INT
-
-
-);
+-- CREATE TABLE IF NOT EXISTS transactions_log (
+--   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--   action VARCHAR(36), 
+--   member_id INT, 
+--   class_id VARCHAR(36), 
+--   name VARCHAR(100) NULL,
+--   date DATE NULL,
+--   time TIME NULL,
+--   location VARCHAR(100) NULL,
+--   room VARCHAR(50) NULL,
+--   token_amount INT, 
+--   token_balance_after INT
+-- 
+-- 
+-- );
 
 -- Insert sample classes for today
 INSERT INTO classes (class_id, time, name, room, instructor, duration, spots, class_size, color, date, location, token_cost) VALUES

@@ -1,3 +1,5 @@
+// --- 
+
 'use server'
 
 import pool from '@/lib/db'
@@ -183,7 +185,7 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
 
 export async function toggleBooking(classId: string, memberId: number): Promise<BookingResult> {
 
-  console.log("📥 -- START   toggleBooking ------------------------------------------------------------------------- 📥 ")
+  console.log("📥 -- START   toggleBooking -------------------------------------------------------------------------")
   console.log("📥 [booking.ts -> toggleBooking ] memberId --- classId >", memberId, "---", classId);
 
   if (!memberId || memberId === 0) {
@@ -205,7 +207,7 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
     // 2. Hydrate Applicant's tokens into Redis if missing (Ensures script has accurate balance data)
     await ensureUserTokensCached(String(memberId), connection);
 
-    // 3. ⚠️ FIXED: Pre-fetch key updated from 'waiting_queue' to 'queue' to match your unified naming scheme
+    // 3. Pre-fetch key updated from 'waiting_queue' to 'queue' to match your unified naming scheme
     const nextQueuedUser = await redis.lindex(`class:${classId}:queue`, 0);
     if (nextQueuedUser) {
       await ensureUserTokensCached(nextQueuedUser, connection); 
@@ -217,7 +219,7 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
       [classId, memberId]
     );
 
-    // 💡 NEW: Fetch target class metadata parameters needed to compile your precise list cache eviction key
+    // 5. Fetch target class metadata parameters needed to compile your precise list cache eviction key
     const [classMetaRows]: any = await connection.execute(
       `SELECT date, location FROM classes WHERE class_id = ? LIMIT 1`,
       [classId]
@@ -234,6 +236,7 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
 
     // Evaluate intent: If an entry exists we route to CANCEL, otherwise BOOK
     const actionType: 'BOOK' | 'CANCEL' = existing.length > 0 ? 'CANCEL' : 'BOOK';
+
     console.log(`📥 [booking.ts -> toggleBooking] Action evaluated as: ${actionType}`);
 
     // 5. Fire the atomic multi-action Lua booking engine transaction
@@ -273,11 +276,10 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
 }
 
 
-// ----------------
+// --------------------------------------------
+// Standard Cache Lazy-Loader for Token Balances
+// --------------------------------------------
 
-/**
- * Standard Cache Lazy-Loader for Token Balances
- */
 async function ensureUserTokensCached(userId: string, connection: any): Promise<number> {
   const tokenKey = `user:${userId}:tokens`;
   
@@ -299,9 +301,10 @@ async function ensureUserTokensCached(userId: string, connection: any): Promise<
   return tokens;
 }
 
-/**
- * Converts a flat Redis array ['key1', 'val1'] into a standard JS Object
- */
+// --------------------------------------------
+// Converts a flat Redis array ['key1', 'val1'] into a standard JS Object
+// --------------------------------------------
+
 function parseRedisResponse(arr: string[]): Record<string, string> {
   const result: Record<string, string> = {};
   for (let i = 0; i < arr.length; i += 2) {
@@ -312,10 +315,21 @@ function parseRedisResponse(arr: string[]): Record<string, string> {
   return result;
 }
 
-/**
- * Syncs the decisions made by the atomic Redis Lua engine down into MySQL.
- */
-async function syncLuaResultToMySQL(
+// --------------------------------------------
+// Syncs the decisions made by the atomic Redis Lua engine down into MySQL.
+// --------------------------------------------
+
+import { RowDataPacket } from "mysql2";
+
+interface ClassMetadata {
+  name: string;
+  date: string;
+  time: string;
+  location: string;
+  room: string;
+}
+
+export async function syncLuaResultToMySQL(
   connection: any,
   luaResult: string[],
   classId: string,
@@ -323,31 +337,21 @@ async function syncLuaResultToMySQL(
   tokenCost: number
 ): Promise<BookingResult> {
 
-  console.log ("--- syncLuaResultToMySQL -----------------------------------")
-  
-  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] classId   " ,    classId )
-  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] memberId  " ,   memberId )
-  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] luaResult " ,  luaResult )
-  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] tokenCost " ,  tokenCost )
-
+  console.log("--- syncLuaResultToMySQL -----------------------------------");
+  console.log(`📥 [booking.ts] classId: ${classId} | memberId: ${memberId} | tokenCost: ${tokenCost}`);
   
   // 1. Parse flat Redis response arrays into a clean object
   const response = parseRedisResponse(luaResult);
-  const status = response.status;
-  const message = response.message;
+  const { status, message, upgradedUser } = response;
 
-  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] status " ,  status )
-  console.log ("📥 [booking.ts -> syncLuaResultToMySQL] message " ,  message )
+  console.log(`📥 [booking.ts] parsed status: ${status} | message: ${message}`);
   
-  // 2. Short-circuit immediately for early exits (Saves database transaction overhead)
+  // 2. Short-circuit immediately for early exits
   if (status === "ERROR_EXIT") {
-
-    console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  ERROR_EXIT `);
     return { success: false, message };
   }
-  if (status === "REJECTED_DUPLICATE") {
 
-    console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  REJECTED_DUPLICATE `);
+  if (status === "REJECTED_DUPLICATE") {
     return { success: false, message: message || "You are already booked for this session." };
   }
 
@@ -357,47 +361,38 @@ async function syncLuaResultToMySQL(
     [classId]
   );
 
-
-  if (metaRows.length === 0) throw new Error('Class metadata missing');
-  const classMeta = metaRows[0];
-  const formattedDate = new Date(classMeta.date).toISOString().split('T')[0];
+  if (metaRows.length === 0) throw new Error("Class metadata missing");
+  const classMeta = metaRows[0] as ClassMetadata;
+  const formattedDate = new Date(classMeta.date).toISOString().split("T")[0];
 
   // 4. Open atomic MySQL transaction wrapper
   await connection.beginTransaction();
 
   try {
-    // ========================================================
-    // CANCELLATION SCENARIOS
-    // ========================================================
-      
-      if (status === "CANCEL_SUCCESSFUL") {
+    // Fetch user token metrics up-front so ALL conditional blocks can access it cleanly
+    const [accountRows] = await connection.execute(
+      `SELECT token_remain FROM accounts WHERE member_id = ?`,
+      [memberId]
+    );
+    const currentTokens = Number(accountRows[0]?.token_remain) || 0;
+    const balanceAfterCancel = currentTokens + tokenCost;
 
-      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CANCEL_SUCCESSFUL `);
-
+    // ========================================================
+    // CANCELLATION SCENARIOS -- FROM confirmed ---> cancelled
+    // ========================================================
+    if (status === "CANCEL_SUCCESSFUL") {
       await connection.execute(
-        `UPDATE bookings SET booking_status = 'cancelled' WHERE class_id = ? AND member_id = ? AND booking_status = 'confirmed'`,
+        `UPDATE bookings SET booking_status = 'cancelled' 
+         WHERE class_id = ? AND member_id = ? AND booking_status = 'confirmed'`,
         [classId, memberId]
       );
       await connection.execute(`UPDATE classes SET spots = spots + 1 WHERE class_id = ?`, [classId]);
+      await connection.execute(`UPDATE accounts SET token_remain = ? WHERE member_id = ?`, [balanceAfterCancel, memberId]);
       
-      // 1. Fetch current tokens from accounts table to compute balance history
-      const [accountRows] = await connection.execute(
-        `SELECT token_remain FROM accounts WHERE member_id = ?`,
-        [memberId]
-      );
-      const currentTokens = Number(accountRows[0].token_remain) || 0;
-      const balanceAfterCancel = currentTokens + tokenCost;
-
-      await connection.execute(
-        `UPDATE accounts SET token_remain = ? WHERE member_id = ?`, 
-        [balanceAfterCancel, memberId]
-      );
-      
-      // 🔥 UPDATED: Pass token_balance_after column (second to last parameter)
       await connection.execute(
         `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
-                 action, token_amount, token_balance_after, created_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'cancel', ?, ?, NOW())`,
+                 action, token_amount, token_balance_after, created_at, status_before, status_after) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'cancel', ?, ?, NOW(), 'confirmed', 'cancelled')`,
         [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, -tokenCost, balanceAfterCancel]
       );
 
@@ -406,42 +401,89 @@ async function syncLuaResultToMySQL(
       return { success: true, message: "Booking cancelled successfully. Tokens refunded.", isBooked: false };
     }
 
-    // -------------------
-
+    // ========================================================
+    // CANCEL_WAITLIST_SUCCESSFUL -- FROM waiting ---> cancelled
+    // ========================================================
     if (status === "CANCEL_WAITLIST_SUCCESSFUL") {
-
-      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CANCEL_WAITLIST_SUCCESSFUL `);
-
-
       await connection.execute(
-        `UPDATE bookings SET booking_status = 'cancelled' WHERE class_id = ? AND member_id = ? AND booking_status = 'waiting'`,
+        `UPDATE bookings SET booking_status = 'cancelled' 
+         WHERE class_id = ? AND member_id = ? AND booking_status = 'waiting'`,
         [classId, memberId]
       );
+
+      await connection.execute(
+        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
+                 action, token_amount, token_balance_after, created_at, status_before, status_after) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'cancel', ?, ?, NOW(), 'waiting', 'cancelled')`,
+        [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, -tokenCost, balanceAfterCancel]
+      );
+
       await connection.commit();
       return { success: true, message: "Removed from waiting list successfully.", isBooked: false };
     }
 
+    // ========================================================
+    // CANCEL_WITH_WAITLIST_UPGRADE -- FROM cancelled ---> confirmed
+    // ========================================================
+
+        // ========================================================
+    // CANCEL_WITH_WAITLIST_UPGRADE -- Clean queue conversion fix
+    // ========================================================
     if (status === "CANCEL_WITH_WAITLIST_UPGRADE") {
-      const upgradedUser = Number(response.upgradedUser);
 
-      // Cancel original user booking row
+      // 🟢 FIX A: Keep member ID as a string representation to match VARCHAR(100) data types
+      const upgradedUserMemberId = String(response.upgradedUser);
+      console.log(`⏳ [booking.ts] Converting waiting row to confirmed for member: ${upgradedUserMemberId}`);
+
+      // 1. Cancel original user booking row
       await connection.execute(
-        `UPDATE bookings SET booking_status = 'cancelled' WHERE class_id = ? AND member_id = ? AND booking_status = 'confirmed'`,
-        [classId, memberId]
+        `UPDATE bookings SET booking_status = 'cancelled' 
+         WHERE class_id = ? AND member_id = ? AND booking_status = 'confirmed'`,
+        [classId, String(memberId)]
       );
-      await connection.execute(
-        `UPDATE accounts SET token_remain = token_remain + ? WHERE member_id = ?`, 
-        [tokenCost, memberId]
+      await connection.execute(`UPDATE accounts SET token_remain = ? WHERE member_id = ?`, [balanceAfterCancel, memberId]);
+
+      // 2. 🟢 FIX B: Update User 2's EXISTING waiting row to confirmed status instead of inserting a new row!
+      const [updateResult] = await connection.execute(
+        `UPDATE bookings 
+         SET booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP 
+         WHERE class_id = ? AND member_id = ? AND booking_status = 'waiting'`,
+        [classId, upgradedUserMemberId]
       );
 
-      // Promote waitlisted user row to confirmed status
-      await connection.execute(
-        `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed') ON DUPLICATE KEY UPDATE booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
-        [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, upgradedUser]
+      // Fallback: If no waiting record row existed to update, run a safe insertion command
+
+      if ((updateResult as any).affectedRows === 0) {
+        await connection.execute(
+          `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+          [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, upgradedUserMemberId]
+        );
+      }
+
+      // 3. Fetch running metrics and deduct tokens
+      const [upgradedAccountRows] = await connection.execute(
+        `SELECT token_remain FROM accounts WHERE member_id = ?`,
+        [upgradedUserMemberId]
       );
+      const upgradedUserCurrentTokens = Number(upgradedAccountRows?.token_remain) || 0;
+      const upgradedUserBalanceAfter = upgradedUserCurrentTokens - tokenCost;
+
+      await connection.execute(`UPDATE accounts SET token_remain = ? WHERE member_id = ?`, [upgradedUserBalanceAfter, upgradedUserMemberId]);
+
+      // 4. Log transactions ledger history
       await connection.execute(
-        `UPDATE accounts SET token_remain = token_remain - ? WHERE member_id = ?`, 
-        [tokenCost, upgradedUser]
+        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
+                 action, token_amount, token_balance_after, created_at, status_before, status_after) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'cancel', ?, ?, NOW(), 'confirmed', 'cancelled')`,
+        [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, -tokenCost, balanceAfterCancel]
+      );
+
+      await connection.execute(
+        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
+                 action, token_amount, token_balance_after, created_at, status_before, status_after) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'waitlist_promote', ?, ?, NOW(), 'waiting', 'confirmed')`,
+        [upgradedUserMemberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, tokenCost, upgradedUserBalanceAfter]
       );
 
       await connection.commit();
@@ -449,198 +491,145 @@ async function syncLuaResultToMySQL(
       return { success: true, message: "Cancelled. Spot passed to next user on waitlist.", isBooked: false };
     }
 
+
+
     // ========================================================
-    // STANDARD BOOKING SCENARIOS
+    // STANDARD BOOKING -- FROM book ---> confirmed
     // ========================================================
-    
     if (status === "CONFIRMED") {
-
-      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CONFIRMED `);
-
-      
       await connection.execute(
-        `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed') ON DUPLICATE KEY UPDATE booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
+        `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed') 
+          ON DUPLICATE KEY UPDATE booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
         [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, memberId]
       );
       await connection.execute(`UPDATE classes SET spots = spots - 1 WHERE class_id = ?`, [classId]);
 
-      // 1. Fetch current tokens from accounts table to compute balance history
-      const [accountRows] = await connection.execute(
-        `SELECT token_remain FROM accounts WHERE member_id = ?`,
-        [memberId]
-      );
-      const currentTokens = Number(accountRows[0].token_remain) || 0;
       const balanceAfterBook = currentTokens - tokenCost;
+      await connection.execute(`UPDATE accounts SET token_remain = ? WHERE member_id = ?`, [balanceAfterBook, memberId]);
 
       await connection.execute(
-        `UPDATE accounts SET token_remain = ? WHERE member_id = ?`, 
-        [balanceAfterBook, memberId]
-      );
-
-      // 🔥 UPDATED: Pass token_balance_after column (second to last parameter)
-      await connection.execute(
-        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, action, token_amount, token_balance_after, created_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'book', ?, ?, NOW())`,
+        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
+                 action, token_amount, token_balance_after, created_at, status_before, status_after)  
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'book', ?, ?, NOW(), 'NONE', 'confirmed')`,
         [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, tokenCost, balanceAfterBook]
       );
 
-      const userTokensKey = `user:${memberId}:tokens`;
-      await redis.decrby(userTokensKey, tokenCost);
-
+      await redis.decrby(`user:${memberId}:tokens`, tokenCost);
       await connection.commit();
       await redis.del(`classes:${classMeta.location}:${formattedDate}`);
       return { success: true, message: "Class booked successfully!", isBooked: true };
     }
 
-    // -------
-
+    // ========================================================
+    // WAITING_QUEUE -- FROM book ---> waiting
+    // ========================================================
     if (status === "WAITING_QUEUE") {
-        console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  WAITING_QUEUE `);
-        
-        // 💡 OPTIONAL: Execute a background query to log this waitlist state into your MySQL DB
-        try {
-        //  await connection.execute(
-        //    `INSERT INTO bookings (class_id, name, member_id, booking_status, booked_at) 
-        //     VALUES (?, ?, ?, 'waiting', NOW()) 
-        //     ON DUPLICATE KEY UPDATE booking_status = 'waiting'`,
-        //    [classId, classMeta.name, memberId]
-        //  );
-
-            await connection.execute(
-               `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) 
-                       VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting') 
-                       ON DUPLICATE KEY UPDATE booking_status = 'waiting', booked_at = CURRENT_TIMESTAMP`,
-        [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, memberId]
-      );
+      try {
+        await connection.execute(
+          `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting') 
+           ON DUPLICATE KEY UPDATE booking_status = 'waiting', booked_at = CURRENT_TIMESTAMP`,
+          [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, memberId]
+        );
     
-          await connection.execute(
-            `INSERT INTO transactions_log 
-              (member_id, action, class_id, token_amount, token_balance_after, created_at) 
-             VALUES (?, 'waitlist_join', ?, NULL, NULL, NOW())`,
-            [memberId, classId]
-          );
+        await connection.execute(
+          `INSERT INTO transactions_log 
+            (member_id, action, class_id, name, date, time, location, room, 
+             token_amount, token_balance_after, created_at, status_before, status_after) 
+           VALUES (?, 'waitlist_join', ?, ?, ?, ?, ?, ?, NULL, ?, NOW(), 'NONE', 'waiting')`,
+          [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, currentTokens]
+        );
 
-        } catch (dbError) {
-          console.error("⚠️ Failed to sync waitlist state entry to MySQL:", dbError);
-          // Do not throw here—Redis is your primary source of truth for the queue, keep running!
-        }
+        await connection.commit();
+      } catch (dbError) {
+        console.error("⚠️ Failed to sync waitlist state entry to MySQL:", dbError);
+      }
+      return { success: false, message: "WAITING_QUEUE", isBooked: false };
+    }
 
-        // Return success: false but with the matching WAITING_QUEUE message string
-        return { 
-          success: false, 
-          message: "WAITING_QUEUE" 
-        };
+    // ========================================================
+    // CONFIRMED_QUEUE_UPGRADE -- Clean queue conversion fix
+    // ========================================================
+    if (status === "CONFIRMED_QUEUE_UPGRADE") {
+      console.log(`⏳ [booking.ts] CONFIRMED_QUEUE_UPGRADE`);
+      // 🟢 FIX A: Force member ID parameter to match string representation
+      const upgradedUserMemberId = String(response.upgradedUser);
+
+      // 1. Clear out original user session booking record slot entirely
+      await connection.execute(
+        `UPDATE bookings SET booking_status = 'cancelled' 
+         WHERE class_id = ? AND member_id = ? AND booking_status = 'confirmed'`,
+        [classId, String(memberId)]
+      );
+
+      // 2. 🟢 FIX B: Directly transform user 2's waiting row into their confirmed slot
+      const [updateResult] = await connection.execute(
+        `UPDATE bookings 
+         SET booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP 
+         WHERE class_id = ? AND member_id = ? AND booking_status = 'waiting'`,
+        [classId, upgradedUserMemberId]
+      );
+
+      // Fallback insurance loop
+      if ((updateResult as any).affectedRows === 0) {
+        await connection.execute(
+          `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+          [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, upgradedUserMemberId]
+        );
       }
 
-
-
-    // -------
-
-    if (status === "CONFIRMED_QUEUE_UPGRADE") {
-      console.log(`⏳ [booking.ts -> syncLuaResultToMySQL ]  CONFIRMED_QUEUE_UPGRADE `);
-
-      const upgradedUser = Number(response.upgradedUser);
-
-      await connection.execute(
-        `INSERT INTO bookings (class_id, name, date, time, location, room, member_id, booking_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed') ON DUPLICATE KEY UPDATE booking_status = 'confirmed', booked_at = CURRENT_TIMESTAMP`,
-        [classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, upgradedUser]
+      // 3. Process account token balance deduction
+      const [upgradedAccountRows] = await connection.execute(
+        `SELECT token_remain FROM accounts WHERE member_id = ?`,
+        [upgradedUserMemberId]
       );
-      await connection.execute(
-        `UPDATE accounts SET token_remain = token_remain - ? WHERE member_id = ?`, 
-        [tokenCost, upgradedUser]
-      );
-      await connection.execute(
-        `UPDATE bookings SET booking_status = 'cancelled' WHERE class_id = ? AND member_id = ? AND booking_status = 'confirmed'`,
-        [classId, memberId]
-      );
+      const upgradedUserCurrentTokens = Number(upgradedAccountRows?.token_remain) || 0;
+      const upgradedUserBalanceAfter = upgradedUserCurrentTokens - tokenCost;
 
-      // Sync both user tokens atomically in Redis using a Pipeline block
-      const upgradedUserTokensKey = `user:${upgradedUser}:tokens`;
-      const originalUserTokensKey = `user:${memberId}:tokens`;
+      await connection.execute(`UPDATE accounts SET token_remain = ? WHERE member_id = ?`, [upgradedUserBalanceAfter, upgradedUserMemberId]);
 
+      // 4. Redis pipeline caching balances execution
       const pipeline = redis.pipeline();
-      pipeline.decrby(upgradedUserTokensKey, tokenCost);
-      pipeline.incrby(originalUserTokensKey, tokenCost);
+      pipeline.decrby(`user:${upgradedUserMemberId}:tokens`, tokenCost);
+      pipeline.incrby(`user:${memberId}:tokens`, tokenCost);
       await pipeline.exec();
+
+      // 5. Append clean transaction ledger lines
+      await connection.execute(
+        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
+                 action, token_amount, token_balance_after, created_at, status_before, status_after)  
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'waitlist_promote', ?, ?, NOW(), 'waiting', 'confirmed')`,
+        [upgradedUserMemberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, tokenCost, upgradedUserBalanceAfter]
+      );
 
       await connection.commit();
       await redis.del(`classes:${classMeta.location}:${formattedDate}`);
       return { success: true, message: "Spot transferred to waitlisted user.", isBooked: false };
     }
 
+
+
+
+
+// ========================================================
+// Any other status - unhandled 
+// ========================================================
+
     throw new Error(`Unhandled Lua script return flag: ${status}`);
 
   } catch (txError) {
     await connection.rollback();
+    console.error("❌ Transaction runtime crashed. Rolling back database changes:", txError);
     throw txError;
   }
 }
 
-/**
- * 🔥 DEV-ONLY TEST ACTION: Triggers your atomic Lua booking engine over the Docker network
- */
-export async function testLuaBookingEngine(
-  userId: string, 
-  classId: string, 
-  testType: 'normal' | 'insufficient_tokens' | 'waitlist'
-): Promise<any> {
-  console.log(`\n🧪 [LUA TEST] Starting script validation sequence for User: ${userId}, Class: ${classId}`);
-  
-  const userTokensKey = `user:${userId}:tokens`;
-  const spotsKey = `class:${classId}:spots`;
-  const classCostKey = `class:${classId}:cost`;
-  const bookedSetKey = `class:${classId}:booked_users`;
-  const queueListKey = `class:${classId}:waiting_queue`;
 
-  try {
-    await redis.del(userTokensKey, spotsKey, classCostKey, bookedSetKey, queueListKey);
-
-    if (testType === 'normal') {
-      console.log('  -> Scenario: Valid booking (User has tokens, class has spaces)');
-      await redis.set(classCostKey, '3');
-      await redis.set(userTokensKey, '10');
-      await redis.set(spotsKey, '5');
-    } else if (testType === 'insufficient_tokens') {
-      console.log('  -> Scenario: Insufficient Tokens block');
-      await redis.set(classCostKey, '5');
-      await redis.set(userTokensKey, '2');
-      await redis.set(spotsKey, '5');
-    } else if (testType === 'waitlist') {
-      console.log('  -> Scenario: Class full (Send to waiting queue list)');
-      await redis.set(classCostKey, '1');
-      await redis.set(userTokensKey, '5');
-      await redis.set(spotsKey, '0');
-    }
-
-    const result = await safeBookClass(userId, classId, 'BOOK');
-    console.log('🎉 [LUA TEST EXECUTION RESULT]:', result);
-
-
-    const endingTokens = await redis.get(userTokensKey);
-    const endingSpots = await redis.get(spotsKey);
-    const bookedUsers = await redis.smembers(bookedSetKey);
-    const waitlistedUsers = await redis.lrange(queueListKey, 0, -1);
-
-    return {
-      success: true,
-      endingTokens,
-      endingSpots,
-      bookedUsers,
-      waitlistedUsers
-    };
-  } catch (err: any) {
-    console.error("❌ Test runner error:", err);
-    return { success: false, error: err.message };
-  }
-}
-
-
-
-// ========================
-// Ensures the required Lua script keys exist in Redis memory.
-// If Redis crashed or restarted, this function re-hydrates it from MySQL.
-// ========================
-
+// ----------------------------
+// -- hydrateClassCache
+// ----------------------------
 
 
 async function hydrateClassCache(classId: string, connection: any): Promise<number> {

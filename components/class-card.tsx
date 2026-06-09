@@ -20,7 +20,7 @@ interface ClassCardProps {
   classItem: ClassItem
   isBooked: boolean
   memberId: number 
-  onBookingChange: (classId: string, isBooked: boolean) => void
+  onBookingChange: (classId: string, isBooked: boolean, isOnWaitlist?: boolean) => void
 }
 
 const colorClasses = {
@@ -36,6 +36,9 @@ const iconColorClasses = {
   yellow: "text-amber-600",
   green: "text-emerald-600",
 }
+
+
+
 
 const classIcons: Record<string, JSX.Element> = {
 
@@ -75,6 +78,9 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
 
   const [isPending, startTransition] = useTransition()
   const [hasPassed, setHasPassed] = useState(false)
+
+  const [isOnWaitlist, setIsOnWaitlist] = useState(false)
+
   
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
@@ -154,73 +160,82 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
     return () => clearInterval(interval)
   }, [classItem.date, classItem.time, classItem.name])
 
+// Core execution handler used for both standard booking and confirmed cancellation triggers
+const executeBookingToggle = () => {
+  startTransition(async () => {
+    console.log(" [class-card.tsx -> ClassCard ] -> memberId:", memberId)
+    
+    // Send the request to your server action 
+    const result = await toggleBooking(classItem.classId, memberId)
+    
+    // 1. Handle standard Booking or Standard Cancellation Success
+    if (result.success && result.isBooked !== undefined) {
 
-
-
-  // Core execution handler used for both standard booking and confirmed cancellation triggers
-  const executeBookingToggle = () => {
-
-    startTransition(async () => {
-
-      console.log(" [class-card.tsx -> ClassCard ] -> ", memberId, "<")
-      const result = await toggleBooking(classItem.classId, memberId)
-      
-      if (result.success && result.isBooked !== undefined) {
-
-        onBookingChange(classItem.classId, result.isBooked)
-        if (result.isBooked) {
-
-          setShowSuccessDialog(true)
-        }
-      } 
-
-      // ---- Intercept the Lua waitlist return flag cleanly
-      //    
-      else if (!result.success && result.message === "WAITING_QUEUE") {
-
-        // Opt A: Trigger a specific workflow alert 
-        onBookingChange(classItem.classId, false) 
-        classItem.spots = 0 
-      
-        setErrorMessage("This class just filled up! You have been placed on the Waiting Queue.")
-        setShowErrorDialog(true)
-      
+      // 🟢 FIXED: Using local state variable 'isOnWaitlist' exclusively
+      if (isOnWaitlist && !result.isBooked) {
+        onBookingChange(classItem.classId, false, false) 
+        setIsOnWaitlist(false) // Clear local waitlist state on cancellation
+        return
       }
-      // Standard error catches (like insufficient tokens, database disconnects, etc.)
-      else if (!result.success) {
-
-        setErrorMessage(result.message || "Something went wrong.")
-        setShowErrorDialog(true)
+      
+      // Otherwise, update regular standard booking flags
+      onBookingChange(classItem.classId, result.isBooked, false)
+      if (result.isBooked) {
+        setShowSuccessDialog(true)
       }
+    } 
 
-    })
-  }
+    // 2. Intercept the Lua waitlist entry flag cleanly
+    else if (!result.success && result.message === "WAITING_QUEUE") {
+      onBookingChange(classItem.classId, false, true) 
+      classItem.spots = 0 
+    
+      setErrorMessage("This class just filled up! You have been placed on the Waiting Queue.")
+      setShowErrorDialog(true)
 
-  const handleButtonClick = () => {
-    if (hasPassed) return
-
-    if (isBooked) {
-      // If booked, intercept with confirmation modal instead of booking instantly
-      setShowCancelDialog(true)
-    } else {
-      // If not booked, execute transaction directly
-      executeBookingToggle()
+      setIsOnWaitlist(true)
     }
+    
+    // 3. Handle explicit Waitlist Cancellation Success
+    else if (result.success && result.message === "CANCEL_WAITLIST_SUCCESSFUL") {
+      onBookingChange(classItem.classId, false, false)
+      setIsOnWaitlist(false) 
+    }
+
+    // 4. Standard runtime backend error catches
+    else if (!result.success) {
+      setErrorMessage(result.message || "Something went wrong.")
+      setShowErrorDialog(true)
+    }
+  })
+}
+
+const handleButtonClick = () => {
+  if (hasPassed) return
+
+  // 🟢 FIXED: Evaluated against 'isOnWaitlist' local state variables
+  if (isBooked || isOnWaitlist) {
+      setShowCancelDialog(true)
+  } else {
+      executeBookingToggle()
   }
+}
 
-  const isFull = classItem.spots <= 0 // 💡 Define this here first!
+const isFull = classItem.spots <= 0
 
-  const buttonText = hasPassed 
-      ? "Passed"
-      : isPending
-      ? "Processing..."
-      : isBooked
-      ? "Cancel Booking"
-      : isFull
-      ? "On Waiting" // 💡 Changed from "Full" to "On Waiting"
-      : "Book Now"
+const buttonText = hasPassed 
+    ? "Passed"
+    : isPending
+    ? "Processing..."
+    : isBooked
+    ? "Cancel Booking"
+    : isOnWaitlist 
+    ? "Cancel Waitlist"              
+    : isFull
+    ? "Join Waitlist" 
+    : "Book Now"
 
-  return (
+return (
   <>
     <div className={cn(
       "rounded-2xl p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02]",
@@ -250,7 +265,6 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
         <div className="flex flex-col items-end gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{classItem.duration}</span>
 
-          {/* 💡 Updated: Renders as "Remaining / Total Capacity" or "Full" */}
           <span className={cn(
             "text-xs font-semibold px-2 py-0.5 rounded-md", 
             isFull 
@@ -262,17 +276,11 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
               : `${classItem.spots} / ${classItem.classSize} available`}
           </span>
 
-          {/* 💡 Injected Custom Token Cost Readout Indicator */}
-
           {classItem.tokenCost !== undefined && (
             <span className="text-xs bg-white/80 dark:bg-black/20 px-2 py-0.5 rounded-full font-bold text-foreground">
               🪙 {classItem.tokenCost} {classItem.tokenCost === 1 ? "Token" : "Tokens"}
             </span>
           )}
-          
-        
-          {/* 💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡 */}
-
         </div>
       </div>
 
@@ -280,7 +288,6 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
       <div className="mt-3 pt-3 border-t border-black/5">
         <Button
           onClick={handleButtonClick}
-          // 💡 Button remains click-enabled if booked, allowing users to cancel even when full
           disabled={isPending || hasPassed} 
           className={cn(
             "w-full h-9 rounded-xl font-semibold text-sm transition-colors",
@@ -288,8 +295,10 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
               ? "!bg-gray-400 !text-white opacity-100 cursor-not-allowed pointer-events-none"
               : isBooked
               ? "bg-red-500 text-white hover:bg-red-600"
+              : isOnWaitlist // 🟢 FIXED: Turned red with active pointer triggers when waitlisted
+              ? "bg-red-500 text-white hover:bg-red-600 cursor-pointer" 
               : isFull
-              ? "bg-amber-500 text-white hover:bg-amber-600 cursor-pointer" // 💡 Changed cursor to show it's clickable
+              ? "bg-amber-500 text-white hover:bg-amber-600 cursor-pointer" 
               : "bg-foreground text-background hover:bg-foreground/90"
           )}
         >
@@ -297,103 +306,107 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
         </Button>
       </div>
     </div>
+    {/* 1. ERROR DIALOG POPUP */}
+    <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-red-600 flex items-center gap-2">
+            ⚠️ Booking Failed
+          </DialogTitle>
+          <DialogDescription className="pt-2 text-base text-foreground font-medium">
+            {errorMessage}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={() => setShowErrorDialog(false)} className="w-full sm:w-auto rounded-xl">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-      {/* 1. ERROR DIALOG POPUP */}
-      <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-red-600 flex items-center gap-2">
-              ⚠️ Booking Failed
-            </DialogTitle>
-            <DialogDescription className="pt-2 text-base text-foreground font-medium">
-              {errorMessage}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowErrorDialog(false)} className="w-full sm:w-auto rounded-xl">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 2. CONFIRMED DETAILS POPUP */}
-      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-600 flex items-center gap-2">
-              🎉 Booking Confirmed!
-            </DialogTitle>
-            <DialogDescription className="pt-4">
-              Your spot has been reserved successfully. Here are your class details:
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="bg-muted/40 p-4 rounded-xl space-y-2.5 my-2 border border-border">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Class Name:</span>
-              <span className="font-bold text-foreground">{classItem.name}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Time:</span>
-              <span className="font-semibold text-foreground">{classItem.time} ({classItem.duration})</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Instructor:</span>
-              <span className="font-medium text-foreground">{classItem.instructor}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Room:</span>
-              <span className="font-medium text-foreground">{classItem.room}</span>
-            </div>
+    {/* 2. CONFIRMED DETAILS POPUP */}
+    <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-emerald-600 flex items-center gap-2">
+            🎉 Booking Confirmed!
+          </DialogTitle>
+          <DialogDescription className="pt-4">
+            Your spot has been reserved successfully. Here are your class details:
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="bg-muted/40 p-4 rounded-xl space-y-2.5 my-2 border border-border">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Class Name:</span>
+            <span className="font-bold text-foreground">{classItem.name}</span>
           </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Time:</span>
+            <span className="font-semibold text-foreground">{classItem.time} ({classItem.duration})</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Instructor:</span>
+            <span className="font-medium text-foreground">{classItem.instructor}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Room:</span>
+            <span className="font-medium text-foreground">{classItem.room}</span>
+          </div>
+        </div>
 
-          <DialogFooter className="mt-2">
-            <Button 
-              onClick={() => setShowSuccessDialog(false)} 
-              className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              Great, thanks!
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <DialogFooter className="mt-2">
+          <Button 
+            onClick={() => setShowSuccessDialog(false)} 
+            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            Great, thanks!
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-      {/* 3. CANCELLATION PROMPT POPUP */}
-      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              Cancel Booking?
-            </DialogTitle>
-            <DialogDescription className="pt-2">
-              Are you sure you want to cancel your booking for <span className="font-semibold text-foreground">{classItem.name}</span> at {classItem.time}?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowCancelDialog(false)} 
-              className="w-full sm:w-auto rounded-xl"
-            >
-              Keep Booking
-            </Button>
-            <Button 
-              onClick={() => {
-                setShowCancelDialog(false)
-                executeBookingToggle()
-              }} 
-              className="w-full sm:w-auto rounded-xl bg-red-500 hover:bg-red-600 text-white"
-            >
-              Yes, Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
+    {/* 3. CANCELLATION PROMPT POPUP */}
+    <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-foreground flex items-center gap-2">
+            Cancel Registration?
+          </DialogTitle>
+          <DialogDescription className="pt-2">
+            Are you sure you want to release your slot for <span className="font-semibold text-foreground">{classItem.name}</span> at {classItem.time}?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setShowCancelDialog(false)} 
+            className="w-full sm:w-auto rounded-xl"
+          >
+            Keep Spot
+          </Button>
+          <Button 
+            onClick={() => {
+              setShowCancelDialog(false)
+              executeBookingToggle()
+            }} 
+            className="w-full sm:w-auto rounded-xl bg-red-500 hover:bg-red-600 text-white"
+          >
+            Yes, Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
+)
 }
 
-          
+
+
+
+
+
+
 
 
