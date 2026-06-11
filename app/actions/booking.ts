@@ -411,22 +411,28 @@ export async function syncLuaResultToMySQL(
         [classId, memberId]
       );
 
-      await connection.execute(
-        `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
-                 action, token_amount, token_balance_after, created_at, status_before, status_after) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'cancel', ?, ?, NOW(), 'waiting', 'cancelled')`,
-        [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, -tokenCost, balanceAfterCancel]
+
+      const [cancelAccountRows] = await connection.execute(
+        `SELECT token_remain FROM accounts WHERE member_id = ?`,
+        [memberId]
       );
+
+
+      await connection.execute(
+        `INSERT INTO transactions_log 
+                    (member_id, action, class_id, name, date, time, location, room, 
+                     token_amount, token_balance_after, created_at, status_before, status_after) 
+                   VALUES (?, 'waitlist_cancel', ?, ?, ?, ?, ?, ?, NULL, ?, NOW(), 'waiting', 'cancelled')`,
+                  [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, cancelAccountRows[0].token_remain]
+      );
+
 
       await connection.commit();
       return { success: true, message: "Removed from waiting list successfully.", isBooked: false };
     }
 
-    // ========================================================
-    // CANCEL_WITH_WAITLIST_UPGRADE -- FROM cancelled ---> confirmed
-    // ========================================================
 
-        // ========================================================
+    // ========================================================
     // CANCEL_WITH_WAITLIST_UPGRADE -- Clean queue conversion fix
     // ========================================================
     if (status === "CANCEL_WITH_WAITLIST_UPGRADE") {
@@ -466,12 +472,19 @@ export async function syncLuaResultToMySQL(
         `SELECT token_remain FROM accounts WHERE member_id = ?`,
         [upgradedUserMemberId]
       );
-      const upgradedUserCurrentTokens = Number(upgradedAccountRows?.token_remain) || 0;
-      const upgradedUserBalanceAfter = upgradedUserCurrentTokens - tokenCost;
+
+      console.log   ( "[bookings -> CANCEL_WITH_WAITLIST_UPGRADE ] upgradedUserMemberId ", upgradedUserMemberId )
+      console.log   ( "[bookings -> CANCEL_WITH_WAITLIST_UPGRADE ] token_remain ", upgradedAccountRows[0].token_remain )
+      console.table ( upgradedAccountRows )
+
+      // const upgradedUserCurrentTokens = Number(upgradedAccountRows?.token_remain) || 0;
+
+      const upgradedUserCurrentTokens = upgradedAccountRows[0].token_remain;
+      const upgradedUserBalanceAfter =  upgradedUserCurrentTokens - tokenCost;
 
       await connection.execute(`UPDATE accounts SET token_remain = ? WHERE member_id = ?`, [upgradedUserBalanceAfter, upgradedUserMemberId]);
 
-      // 4. Log transactions ledger history
+      // 4. Log transactions ledger history - AUDIT LOG A
       await connection.execute(
         `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
                  action, token_amount, token_balance_after, created_at, status_before, status_after) 
@@ -479,6 +492,7 @@ export async function syncLuaResultToMySQL(
         [memberId, classId, classMeta.name, classMeta.date, classMeta.time, classMeta.location, classMeta.room, -tokenCost, balanceAfterCancel]
       );
 
+      // 4. Log transactions ledger history - AUDIT LOG B
       await connection.execute(
         `INSERT INTO transactions_log (member_id, class_id, name, date, time, location, room, 
                  action, token_amount, token_balance_after, created_at, status_before, status_after) 

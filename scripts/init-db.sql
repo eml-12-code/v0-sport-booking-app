@@ -26,19 +26,19 @@ CREATE TABLE IF NOT EXISTS bookings (
 -- 2. Create the Immutable Audit Trail Transaction Logs Table
 CREATE TABLE IF NOT EXISTS transactions_log (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
-    booking_id INT DEFAULT NULL, 
-    action VARCHAR(36) DEFAULT NULL, 
-    status_before VARCHAR(20) DEFAULT NULL, 
-    status_after VARCHAR(20) DEFAULT NULL,  
     member_id VARCHAR(100) DEFAULT NULL, 
+    action VARCHAR(36) DEFAULT NULL, 
+    token_amount INT DEFAULT NULL, 
+    token_balance_after INT DEFAULT NULL, 
+    booking_id INT DEFAULT NULL, 
     class_id VARCHAR(36) DEFAULT NULL,
     name VARCHAR(100) DEFAULT NULL,
     date DATE DEFAULT NULL,
     time TIME DEFAULT NULL,
     location VARCHAR(100) DEFAULT NULL,
     room VARCHAR(50) DEFAULT NULL,
-    token_amount INT DEFAULT NULL, 
-    token_balance_after INT DEFAULT NULL, 
+    status_before VARCHAR(20) DEFAULT NULL, 
+    status_after VARCHAR(20) DEFAULT NULL,  
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     -- Index to quickly pull a member's complete transactional accounting log history
