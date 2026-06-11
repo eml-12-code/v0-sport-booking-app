@@ -11,4 +11,5 @@ export interface ClassItem {
   classSize: number
   color: "blue" | "pink" | "yellow" | "green"
   tokenCost: number
+  isWaitlisted?: boolean
 }

@@ -7,6 +7,7 @@ import redis from '@/lib/redis'
 import { ClassItem } from "@/types/sport-app"
 import { safeBookClass } from '@/lib/redis'
 import { RowDataPacket } from 'mysql2'
+import { revalidatePath } from "next/cache";
 
 
 export interface BookingResult {
@@ -32,92 +33,91 @@ const getCacheKey = (date: string, location: string) => `classes:${location}:${d
 
 // ----------------------------------------------------------------------------------------------------
 // Get classes for a specific date and location with Redis Cache-Aside
-// ----------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------- Cache Hit! Reading from list cache:
+export async function getClasses(date: Date, location: string, memberId?: number): Promise<ClassItem[]> {
 
-
-export async function getClasses(date: Date, location: string): Promise<ClassItem[]> {
   // 1. Format the Date object into a reliable 'YYYY-MM-DD' string for SQL and Cache keys
   const selectedDateString = date.toISOString().split('T')[0]
   
-  // 💡 Include location inside the cacheKey so different areas don't overwrite each other
+  // Include location inside the cacheKey so different areas don't overwrite each other
   const cacheKey = `classes:list:${location.toLowerCase().replace(/\s+/g, '-')}:${selectedDateString}`
 
   try {
+    let classesBaseArray: any[] = []
+
     // 2. Try to read from the string list cache
     const cachedData = await redis.get(cacheKey)
     
+    // ----- ELM ------
+    
     if (cachedData) {
       console.log(`🎯 [booking.ts -> getClasses] Cache Hit! Reading from list cache: ${cacheKey}`)
-      const parsedClasses = JSON.parse(cachedData)
+      classesBaseArray = JSON.parse(cachedData)
+    } else {
+      console.warn(`⏳ [booking.ts -> getClasses] Cache Miss for date ${selectedDateString} at ${location}. Fetching from MySQL...`)
 
-      // Overwrite static spots with live Redis atomic counters before returning
-      const liveClassesSnapshot = await Promise.all(
-        parsedClasses.map(async (cls: any) => {
-          const classId = cls.classId || cls.class_id
-          const liveSpots = await redis.get(`class:${classId}:spots`)
-          return {
-            ...cls,
-            spots: liveSpots !== null ? Number(liveSpots) : cls.spots
-          }
-        })
+      // 3. MySQL Query matching your signature's date and location parameters
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT 
+          class_id, name, date, time, room, instructor, 
+          duration, spots, class_size, color, token_cost 
+        FROM classes 
+        WHERE DATE(date) = ? AND location = ?
+        ORDER BY time ASC`,
+        [selectedDateString, location]
       )
-      return liveClassesSnapshot
+
+      // 4. Transform raw snake_case database records into camelCase ClassItem structures
+      classesBaseArray = rows.map((row: any) => ({
+        classId: row.class_id,
+        name: row.name,
+        date: String(row.date),
+        time: String(row.time),
+        room: row.room,
+        instructor: row.instructor,
+        duration: row.duration,
+        spots: row.spots,
+        classSize: row.class_size,   
+        color: row.color,
+        tokenCost: row.token_cost,   
+      }))
+
+      // 5. Save clean metadata to cache (excluding individual user flags)
+      if (classesBaseArray.length > 0) {
+        await redis.set(cacheKey, JSON.stringify(classesBaseArray), 'EX', 3600) 
+        console.log(`💾 [booking.ts -> getClasses] Data saved to Redis cache: ${cacheKey}`)
+        await debugListCacheKey(cacheKey)
+      }
     }
 
-    console.warn(`⏳ [booking.ts -> getClasses] Cache Miss for date ${selectedDateString} at ${location}. Fetching from MySQL...`)
-
-    // 3. MySQL Query matching your signature's date and location parameters
-    const [rows] = await pool.execute<RowDataPacket[]>( // Using your global pool instance
-      `SELECT 
-        class_id, 
-        name, 
-        date, 
-        time, 
-        room, 
-        instructor, 
-        duration, 
-        spots, 
-        class_size, 
-        color, 
-        token_cost 
-      FROM classes 
-      WHERE DATE(date) = ? AND location = ?
-      ORDER BY time ASC`,
-      [selectedDateString, location]
-    )
-
-    // 4. Transform raw snake_case database records into camelCase ClassItem interfaces
-    const formattedClasses: ClassItem[] = await Promise.all(
-      rows.map(async (row: any) => {
-        const classId = row.class_id
+    // 🟢 FIXED: This block runs for BOTH cache hits and cache misses!
+    // It loops through your classesBaseArray and overlays user-specific waitlist data.
+    const liveClassesSnapshot = await Promise.all(
+      classesBaseArray.map(async (cls: any) => {
+        const classId = cls.classId || cls.class_id
+        
+        // Fetch current real-time room capacity counts from Redis
         const liveSpots = await redis.get(`class:${classId}:spots`)
+        
+        // Calculate if this specific member is in the active Redis queue list
+        let userIsWaitlisted = false
+        if (memberId && memberId !== 0) {
+          const queueListKey = `class:${classId}:queue`
+          const waitlistPosition = await redis.lpos(queueListKey, String(memberId))
+          userIsWaitlisted = waitlistPosition !== null
+        }
 
         return {
-          classId: classId,
-          name: row.name,
-          date: String(row.date),
-          time: String(row.time),
-          room: row.room,
-          instructor: row.instructor,
-          duration: row.duration,
-          spots: liveSpots !== null ? Number(liveSpots) : row.spots,
-          classSize: row.class_size,   // 💡 Properly mapped to your layout specifications
-          color: row.color,
-          tokenCost: row.token_cost,   // 💡 Properly mapped to your layout specifications
+          ...cls,
+          spots: liveSpots !== null ? Number(liveSpots) : cls.spots,
+          isWaitlisted: userIsWaitlisted // 💡 Injected dynamically right before sending to UI
         }
       })
     )
 
-    // 5. If entries exist, save them to cache and run your new utility debugger
-    if (formattedClasses.length > 0) {
-      await redis.set(cacheKey, JSON.stringify(formattedClasses), 'EX', 3600) // 1-hour expiration
-      console.log(`💾 [booking.ts -> getClasses] Data saved to Redis cache: ${cacheKey}`)
-      
-      // Invoke your debugger function passing the exact formatted cache key
-      await debugListCacheKey(cacheKey)
-    }
+    return liveClassesSnapshot
 
-    return formattedClasses
+// -------- ELM ---------------
 
   } catch (error) {
     console.error(`❌ [booking.ts -> getClasses] Failed to load classes array list:`, error)
@@ -127,8 +127,8 @@ export async function getClasses(date: Date, location: string): Promise<ClassIte
 
 
 
-// ----------------------------------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------------------------------
 // Get user's booked classes
 export async function getBookedClasses(memberId: number): Promise<BookedClassItem[]> {
   
@@ -144,6 +144,7 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
       `SELECT 
         b.booking_id AS bookingId, 
         b.class_id AS classId, 
+        b.booking_status AS bookingStatus,
         c.name AS className, 
         c.date, 
         DATE_FORMAT(c.time, '%l:%i %p') AS time, 
@@ -153,12 +154,12 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
         c.spots AS spotRemain
        FROM bookings b
        JOIN classes c ON b.class_id = c.class_id
-       WHERE b.member_id = ? AND b.booking_status = 'confirmed'
+       WHERE b.member_id = ? AND b.booking_status IN ('confirmed', 'waiting')
        ORDER BY c.date ASC, c.time ASC`,
       [memberId]
     )
 
-    console.log("📥 [booking.ts -> getBookedClasses ] Total Bookings Found:", rows.length, " for Member ID ", memberId);
+    console.log("📥 [booking.ts -> getBookedClasses ] Total Active Records Found:", rows.length, " for Member ID ", memberId);
     console.table(rows); 
  
     console.log("📥 -- END  getBookedClasses ----------------------------- 📥 ")
@@ -173,6 +174,7 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
       date: new Date(row.date).toISOString().split('T')[0],
       location: String(row.location),
       spots: Number(row.spots ?? 0),
+      status: String(row.bookingStatus),
     }))
 
   } catch (error) {
@@ -181,6 +183,8 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
   }
 }
 
+
+// ----------------------------------------------------------------------------------------------------
 // --- Toggle booking for a class and invalidate relevant cache
 
 export async function toggleBooking(classId: string, memberId: number): Promise<BookingResult> {
@@ -265,15 +269,23 @@ export async function toggleBooking(classId: string, memberId: number): Promise<
 
     // 6. Sync decisions back to MySQL and verify Redis token counts remain matching
     const result = await syncLuaResultToMySQL(connection, luaResult, classId, memberId, tokenCost);
+    
+    // 🟢 FIXED: Purge Next.js background App Router frame caches for this page
+    revalidatePath("/classes"); 
+
     return result;
     
   } catch (error: any) {
+
     console.error('Booking engine crash recovered:', error);
     return { success: false, message: error.message || 'Transaction failure.' };
+  
   } finally {
     connection.release();
   }
 }
+
+// ----------------------------------------------------------------------------------------------------
 
 
 // --------------------------------------------

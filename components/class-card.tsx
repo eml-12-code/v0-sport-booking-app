@@ -74,12 +74,17 @@ const classIcons: Record<string, JSX.Element> = {
   ),
 }
 
+// ------------------------------------
+// ClassCard
+// ------------------------------------
+
 export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: ClassCardProps) {
 
-  const [isPending, startTransition] = useTransition()
-  const [hasPassed, setHasPassed] = useState(false)
+  const [isPending, startTransition]    = useTransition()
+  const [hasPassed, setHasPassed]       = useState(false)
 
-  const [isOnWaitlist, setIsOnWaitlist] = useState(false)
+//  const [isOnWaitlist, setIsOnWaitlist] = useState(false)
+  const [isOnWaitlist, setIsOnWaitlist] = useState(classItem.isWaitlisted || false)
 
   
   const [showErrorDialog, setShowErrorDialog] = useState(false)
@@ -126,7 +131,7 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
       }
 
       const timeStr = classItem.time.trim().toUpperCase()
-      console.log("⏱️ [ class-card.tsx -> ClassCard Verification Fixed ]", classItem.name, year, month, day, timeStr)
+      // console.log("⏱️ [ class-card.tsx -> ClassCard Verification Fixed ]", classItem.name, year, month, day, timeStr)
 
       // FIXED REGEX: Anchor set correctly to string end '$' instead of literal character '\$'
       const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
@@ -160,8 +165,18 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
     return () => clearInterval(interval)
   }, [classItem.date, classItem.time, classItem.name])
 
-// Core execution handler used for both standard booking and confirmed cancellation triggers
-const executeBookingToggle = () => {
+
+  // 🟢 ADD THIS NEW SEPARATE HOOK DIRECTLY HERE:
+  // This forces the card UI text to update whenever you switch browser tabs 
+  // and Next.js pulls fresh waitlist data from your Redis/MySQL backend.
+
+  useEffect(() => {
+    setIsOnWaitlist(classItem.isWaitlisted || false)
+  }, [classItem.isWaitlisted])
+
+
+  // Core execution handler used for both standard booking and confirmed cancellation triggers
+  const executeBookingToggle = () => {
   startTransition(async () => {
     console.log(" [class-card.tsx -> ClassCard ] -> memberId:", memberId)
     
@@ -208,9 +223,10 @@ const executeBookingToggle = () => {
       setShowErrorDialog(true)
     }
   })
-}
+  }
 
-const handleButtonClick = () => {
+  // handleButtonClick
+  const handleButtonClick = () => {
   if (hasPassed) return
 
   // 🟢 FIXED: Evaluated against 'isOnWaitlist' local state variables
@@ -219,7 +235,7 @@ const handleButtonClick = () => {
   } else {
       executeBookingToggle()
   }
-}
+  }
 
 const isFull = classItem.spots <= 0
 
@@ -242,6 +258,8 @@ return (
       colorClasses[classItem.color],
       hasPassed && "opacity-50 saturate-50 pointer-events-none select-none shadow-none scale-100 hover:scale-100 hover:shadow-none"
     )}>
+
+      {/* iconColorClasses  */}
       <div className="flex items-start justify-between">
         <div className="flex gap-3">
           <div className={cn(
@@ -305,7 +323,9 @@ return (
           {buttonText}
         </Button>
       </div>
+
     </div>
+
     {/* 1. ERROR DIALOG POPUP */}
     <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
       <DialogContent className="sm:max-w-md">
@@ -398,6 +418,7 @@ return (
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
   </>
 )
 }

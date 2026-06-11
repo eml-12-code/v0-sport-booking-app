@@ -67,8 +67,6 @@
 //          └─ Triggers reactive screen rendering, syncing all tab elements.
 
 
-
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react" 
@@ -77,16 +75,21 @@ import { ClassList } from "@/components/class-list"
 import { useSession } from "next-auth/react"
 import { getAccountProfile } from "@/app/actions/account"
 import { getClasses, getBookedClasses } from "@/app/actions/booking"
+import { RefreshOnFocus } from "@/components/refresh-on-focus"
 
 const locations = ["Hong Kong", "Kowloon", "Macau"] as const
 
 // Helper to get time-based greeting
+
 const getGreeting = (): string => {
   const hour = new Date().getHours()
   if (hour < 12) return "Good morning"
   if (hour < 17) return "Good afternoon"
   return "Good evening"
 }
+
+
+// -------------------------------------------------------------------------------
 
 export function ClassesScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -115,78 +118,93 @@ export function ClassesScreen() {
     }
 
     try {
+
       console.log("🔍 [Trace 1] Starting fetchData loop...")
       const profile = await getAccountProfile()
       const currentMemberId = profile ? profile.memberId : 0
       setMemberId(currentMemberId)
 
-      console.log("🔍 [Trace 2] Profile loaded. Member ID:", currentMemberId)
-      console.log("🔍 [Trace 3] Querying MySQL for Date:", selectedDate, "Location:", selectedLocation)
-
       const [classesData, bookedData] = await Promise.all([
-        getClasses(selectedDate || new Date(), selectedLocation),
+        getClasses(selectedDate || new Date(), selectedLocation, currentMemberId),
         getBookedClasses(currentMemberId)
       ])
 
-      console.log("🔍 [Trace 4] MySQL Classes Data Received:", classesData)
-      console.log("🔍 [Trace 5] MySQL Booked IDs Received:", bookedData)
+    
+      // 1. Separate confirmed IDs from waitlisted IDs using the new status field
+      const confirmedIds  = bookedData.filter((b: any) => b.status === 'confirmed').map((b: any) => b.classId)
+      const waitlistedIds = bookedData.filter((b: any) => b.status === 'waiting').map((b: any) => b.classId)
+      setBookedClasses(confirmedIds);
 
-      setBookedClasses(bookedData.map((b) => b.classId))
-      setClasses(classesData || [])
-      classesRef.current = classesData || [] // Updates reference variable silently without re-renders
+      // Map over your classes data array to lock in statuses before putting them into local state
+      const verifiedClasses = (classesData || []).map((cls: any) => ({
+        ...cls,
+        // If MySQL lists them as 'waiting', or our Redis check marked it true, enforce waitlist styling
+        isWaitlisted: waitlistedIds.includes(cls.classId) || cls.isWaitlisted || false
+      }));
+
+      setClasses(verifiedClasses);
+      classesRef.current = verifiedClasses;
+      setIsLoading(false)
       
-      console.log("🔍 [Trace 6] React States updated successfully.")
+      console.log(`🔍 [Trace 6] UI synced. Confirmed: ${confirmedIds.length}, Waitlisted: ${waitlistedIds.length}`);
+    
     } catch (error) {
       console.error("❌ CRASH inside fetchData loop orchestrator:", error)
-    } {
+    } finally {
       setIsLoading(false)
     }
+
   }, [selectedDate, selectedLocation, status]) // Optimized dependency array to protect runtime loop states
 
+
+
+  // -------------------------------------------------------------------------------
   // Smart polling effect loop with auto-shutdown safety parameters
+
   useEffect(() => {
     fetchData()
 
-  // Inside your useEffect hook block in classes-screen.tsx -> Replace isClassExpired with this:
+    const isClassExpired = (cls: any) => {
+      try {
+        if (!cls || !cls.time) return false;
 
-  const isClassExpired = (cls: any) => {
-    try {
-      if (!cls || !cls.time) return false;
+        let year: number, month: number, day: number;
 
-      let year: number, month: number, day: number;
+        // 🟢 UNIVERSAL NORMALIZER: Convert whatever format cls.date is into a clean Date object
+        const safeDateObject = cls.date ? new Date(cls.date) : new Date();
 
-      // 🟢 UNIVERSAL NORMALIZER: Convert whatever format cls.date is into a clean Date object
-      const safeDateObject = cls.date ? new Date(cls.date) : new Date();
+        if (isNaN(safeDateObject.getTime())) {
+          const fallback = new Date()
+          year = fallback.getFullYear()
+          month = fallback.getMonth() + 1
+          day = fallback.getDate()
+        } else {
+          year = safeDateObject.getFullYear()
+          month = safeDateObject.getMonth() + 1
+          day = safeDateObject.getDate()
+        }
 
-      if (isNaN(safeDateObject.getTime())) {
-        const fallback = new Date()
-        year = fallback.getFullYear()
-        month = fallback.getMonth() + 1
-        day = fallback.getDate()
-      } else {
-        year = safeDateObject.getFullYear()
-        month = safeDateObject.getMonth() + 1
-        day = safeDateObject.getDate()
+        const timeStr = cls.time.trim().toUpperCase()
+        const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
+        if (!match) return false
+
+        let hours = parseInt(match[1], 10)
+        const minutes = parseInt(match[2], 10)
+        const modifier = match[3]
+
+        if (modifier === 'PM' && hours !== 12) hours += 12
+        if (modifier === 'AM' && hours === 12) hours = 0
+
+        const exactClassDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
+        return new Date() > exactClassDateTime
+      } catch (e) {
+        console.error("❌ Polling pre-check parser error:", e)
+        return false
       }
-
-      const timeStr = cls.time.trim().toUpperCase()
-      const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
-      if (!match) return false
-
-      let hours = parseInt(match[1], 10)
-      const minutes = parseInt(match[2], 10)
-      const modifier = match[3]
-
-      if (modifier === 'PM' && hours !== 12) hours += 12
-      if (modifier === 'AM' && hours === 12) hours = 0
-
-      const exactClassDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
-      return new Date() > exactClassDateTime
-    } catch (e) {
-      console.error("❌ Polling pre-check parser error:", e)
-      return false
     }
-  }
+
+
+  // -------------------------------------------------------------------------------
 
     const syncInterval = setInterval(() => {
       const currentOnScreenClasses = classesRef.current
@@ -208,17 +226,38 @@ export function ClassesScreen() {
     return () => clearInterval(syncInterval)
   }, [fetchData, status])
 
-  const handleBookingChange = async (classId: string, isBooked: boolean) => {
+
+  // ----------------------------------------------------------------------
+  // 🟢 FIXED: Accept the optional third argument `isOnWaitlist` from ClassCard 
+  // and update local state arrays to maintain status over tab/polling updates.
+  
+  const handleBookingChange = async (classId: string, isBooked: boolean, isOnWaitlist: boolean = false) => {
+   
+    console.log ( "[classes-scree.tsx --> handleBookingChange ] ---- START ----- " )
+
     setBookedClasses((prev) =>
       isBooked ? [...prev, classId] : prev.filter((id) => id !== classId)
     )
+
+    setClasses((prevClasses) =>
+      prevClasses.map((c: any) =>
+        c.classId === classId ? { ...c, isWaitlisted: isOnWaitlist } : c
+      )
+    )
+
+    console.log ( "[classes-scree.tsx --> handleBookingChange ] ---- Before " )
+
     await fetchData()
+
+    console.log ( "[classes-scree.tsx --> handleBookingChange ] ---- After " )
   }
 
+  // ----------------------------------------------------------------------
+
   const userDisplayName =
-    session?.user?.name?.trim() ||
-    session?.user?.email?.split("@")[0]?.trim() ||
-    ""
+          session?.user?.name?.trim() ||
+          session?.user?.email?.split("@")[0]?.trim() ||  ""
+
   console.log("ClassesScreen --> Rendering view grid canvas surface layers")
 
   return (
@@ -296,6 +335,9 @@ export function ClassesScreen() {
           />
         )}
       </main>
+
+      {/* Invisible Sync handler tracking window focus/tab swapping instantly */}
+      <RefreshOnFocus />
     </>
   )
 }

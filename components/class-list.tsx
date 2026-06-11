@@ -10,7 +10,7 @@ interface ClassListProps {
     classes: ClassItem[]
     bookedClasses: string[]
     memberId: number
-    handleBookingChange: (classId: string, isBooked: boolean) => void
+    handleBookingChange: (classId: string, isBooked: boolean , isOnWaitlist?: boolean ) => void
     selectedCalendarDate: Date 
 }
 
@@ -78,8 +78,11 @@ export function ClassList({
             key={classItem.classId}
             classItem={{
               ...classItem,
+              
               // 🟢 FIXED: Safely applies the fallback string with full TypeScript type safety
-              date: classItem.date || fallbackDateString 
+              date: classItem.date || fallbackDateString ,
+              isWaitlisted: classItem.isWaitlisted
+
             }}
             isBooked={bookedClasses.includes(classItem.classId)}
             memberId={memberId} 
