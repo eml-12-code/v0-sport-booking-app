@@ -94,67 +94,73 @@ export function ClassCard({ classItem, isBooked, memberId, onBookingChange }: Cl
 
   const icon = classIcons[classItem.name] || classIcons.HIIT
 
-  // Live interval time-expiration check runner hook
 
+
+  // -------------------------------------------------------
+  // Live interval time-expiration check runner hook
+// -------------------------------------------------------
+  
   useEffect(() => {
 
   function checkTimeExpiration() {
 
     try {
 
-      if (!classItem || !classItem.time) {
-        setHasPassed(false)
-        return
-      }
+        if (!classItem || !classItem.time) {
+          setHasPassed(false)
+          return
+        }
 
-      let year: number, month: number, day: number;
+        let year: number, month: number, day: number;
 
-      // 🟢 UNIVERSAL NORMALIZER: Force whatever format classItem.date is into a clean Date object
+        // 1. Parse the string characters cleanly to block UTC/ISO timezone shifts
+        
+        if (classItem.date && typeof classItem.date === "string" && classItem.date.includes("-")) {
+          const dateParts = classItem.date.split("-"); // Splits "2026-06-12" into ["2026", "06", "12"]
+          year = parseInt(dateParts[0], 10);
+          month = parseInt(dateParts[1], 10);
+          day = parseInt(dateParts[2], 10);
+        } else {
+          const fallback = new Date()
+          year = fallback.getFullYear()
+          month = fallback.getMonth() + 1
+          day = fallback.getDate()
+        }
+
+        const timeStr = classItem.time.trim().toUpperCase()
+        let hours = 0
+        let minutes = 0
+
+        // 2. 🟢 FIXED: Handle 24-hour database strings (e.g., "06:00:00" or "23:30:00")
+        if (timeStr.includes(":") && timeStr.split(":").length === 3) {
+          const timeParts = timeStr.split(":")
+          hours = parseInt(timeParts[0], 10)
+          minutes = parseInt(timeParts[1], 10)
+        } 
+        // 3. 🟢 FIXED: Fallback pattern matching for AM/PM strings (e.g., "6:00 AM")
+        else {
+          const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
+          if (!match) {
+            console.warn(`⚠️ [ClassCard] Unknown time string format: "${timeStr}"`)
+            setHasPassed(false)
+            return
+          }
+          hours = parseInt(match[1], 10)
+          minutes = parseInt(match[2], 10)
+          const modifier = match[3]
+
+          if (modifier === 'PM' && hours !== 12) hours += 12
+          if (modifier === 'AM' && hours === 12) hours = 0
+        }
+
+        // 4. Construct the exact class date context purely using local system integers
+        const exactClassDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
+        const now = new Date()
+        
+        setHasPassed(now > exactClassDateTime)
       
-      const safeDateObject = classItem.date ? new Date(classItem.date) : new Date();
-
-      if (isNaN(safeDateObject.getTime())) {
-
-        // Safe Fallback if parsing fails: Use current live date variables
-        const fallback = new Date()
-        year = fallback.getFullYear()
-        month = fallback.getMonth() + 1
-        day = fallback.getDate()
-      
-      } else {
-      
-        // Extract accurate numeric parameters directly from our verified date object instance
-        year = safeDateObject.getFullYear()
-        month = safeDateObject.getMonth() + 1 // JavaScript months are 0-11, add 1 to normalize
-        day = safeDateObject.getDate()
-      
-      }
-
-      const timeStr = classItem.time.trim().toUpperCase()
-      // console.log("⏱️ [ class-card.tsx -> ClassCard Verification Fixed ]", classItem.name, year, month, day, timeStr)
-
-      // FIXED REGEX: Anchor set correctly to string end '$' instead of literal character '\$'
-      const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)?$/)
-
-      if (!match) {
-        setHasPassed(false)
-        return
-      }  
-
-      let hours = parseInt(match[1], 10)
-      const minutes = parseInt(match[2], 10)
-      const modifier = match[3]
-
-      if (modifier === 'PM' && hours !== 12) hours += 12
-      if (modifier === 'AM' && hours === 12) hours = 0
-
-      // Create the precise combined timestamp milestone parameters
-      const exactClassDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
-      
-      // Update our reactive component layout status tracking variable
-      setHasPassed(new Date() > exactClassDateTime)
-    
-    } catch (e) {
+      } 
+     catch (e) {
 
       console.error("Failed to parse combined class deadline time:", e)
     }
@@ -253,78 +259,82 @@ const buttonText = hasPassed
 
 return (
   <>
-    <div className={cn(
-      "rounded-2xl p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02]",
-      colorClasses[classItem.color],
-      hasPassed && "opacity-50 saturate-50 pointer-events-none select-none shadow-none scale-100 hover:scale-100 hover:shadow-none"
-    )}>
+      <div className={cn(
+        "rounded-2xl p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02]",
+        colorClasses[classItem.color]
+        // 🟢 FIXED: Removed "hasPassed && 'opacity-50 saturate-50 pointer-events-none...'" from here
+        // This ensures the class text, room info, and duration remain bright and legible!
+      )}>
 
-      {/* iconColorClasses  */}
-      <div className="flex items-start justify-between">
-        <div className="flex gap-3">
-          <div className={cn(
-            "w-12 h-12 rounded-xl bg-white/60 flex items-center justify-center",
-            iconColorClasses[classItem.color]
-          )}>
-            {icon}
+        {/* Header content section (Icon, Time, Class Title, Instructor) */}
+        <div className="flex items-start justify-between">
+          <div className="flex gap-3">
+            <div className={cn(
+              "w-12 h-12 rounded-xl bg-white/60 flex items-center justify-center",
+              iconColorClasses[classItem.color]
+            )}>
+              {icon}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-medium text-muted-foreground">{classItem.time}</span>
+              <h3 className="text-base font-bold text-foreground">
+                {classItem.name} {isBooked && !hasPassed && "✓"}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {classItem.room} • {classItem.instructor}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-xs font-medium text-muted-foreground">{classItem.time}</span>
-            <h3 className="text-base font-bold text-foreground">
-              {classItem.name} {isBooked && !hasPassed && "✓"}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {classItem.room} • {classItem.instructor}
-            </p>
-          </div>
-        </div>
-        
-        {/* Right Info Section */}
-        <div className="flex flex-col items-end gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">{classItem.duration}</span>
+          
+          {/* Right Info Capacity Tracker Section */}
+          <div className="flex flex-col items-end gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">{classItem.duration}</span>
 
-          <span className={cn(
-            "text-xs font-semibold px-2 py-0.5 rounded-md", 
-            isFull 
-              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" 
-              : "text-muted-foreground bg-black/5 dark:bg-white/5"
-          )}>
-            {isFull 
-              ? `0 / ${classItem.classSize} spots (Full)` 
-              : `${classItem.spots} / ${classItem.classSize} available`}
-          </span>
-
-          {classItem.tokenCost !== undefined && (
-            <span className="text-xs bg-white/80 dark:bg-black/20 px-2 py-0.5 rounded-full font-bold text-foreground">
-              🪙 {classItem.tokenCost} {classItem.tokenCost === 1 ? "Token" : "Tokens"}
+            <span className={cn(
+              "text-xs font-semibold px-2 py-0.5 rounded-md", 
+              isFull 
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" 
+                : "text-muted-foreground bg-black/5 dark:bg-white/5"
+            )}>
+              {isFull 
+                ? `0 / ${classItem.classSize} spots (Full)` 
+                : `${classItem.spots} / ${classItem.classSize} available`}
             </span>
-          )}
+
+            {classItem.tokenCost !== undefined && (
+              <span className="text-xs bg-white/80 dark:bg-black/20 px-2 py-0.5 rounded-full font-bold text-foreground">
+                🪙 {classItem.tokenCost} {classItem.tokenCost === 1 ? "Token" : "Tokens"}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Button CTA Action container block */}
-      <div className="mt-3 pt-3 border-t border-black/5">
-        <Button
-          onClick={handleButtonClick}
-          disabled={isPending || hasPassed} 
-          className={cn(
-            "w-full h-9 rounded-xl font-semibold text-sm transition-colors",
-            hasPassed
-              ? "!bg-gray-400 !text-white opacity-100 cursor-not-allowed pointer-events-none"
-              : isBooked
-              ? "bg-red-500 text-white hover:bg-red-600"
-              : isOnWaitlist // 🟢 FIXED: Turned red with active pointer triggers when waitlisted
-              ? "bg-red-500 text-white hover:bg-red-600 cursor-pointer" 
-              : isFull
-              ? "bg-amber-500 text-white hover:bg-amber-600 cursor-pointer" 
-              : "bg-foreground text-background hover:bg-foreground/90"
-          )}
-        >
-          {buttonText}
-        </Button>
-      </div>
+        {/* Button Container Block */}
+        <div className="mt-3 pt-3 border-t border-black/5">
+          <Button
+            onClick={handleButtonClick}
+            // HTML disabled property handles active state tracking mechanics
+            disabled={isPending || hasPassed} 
+            className={cn(
+              "w-full h-9 rounded-xl font-semibold text-sm transition-colors",
+              
+              // 🟢 FIXED: Apply the visual dim-out properties EXCLUSIVELY to the button block itself
+              hasPassed
+                ? "!bg-gray-400 !text-white opacity-50 cursor-not-allowed pointer-events-none shadow-none scale-100"
+                : isBooked
+                ? "bg-red-500 text-white hover:bg-red-600"
+                : isOnWaitlist 
+                ? "bg-red-500 text-white hover:bg-red-600 cursor-pointer" 
+                : isFull
+                ? "bg-amber-500 text-white hover:bg-amber-600 cursor-pointer" 
+                : "bg-foreground text-background hover:bg-foreground/90"
+            )}
+          >
+            {buttonText}
+          </Button>
+        </div>
 
-    </div>
+      </div>
 
     {/* 1. ERROR DIALOG POPUP */}
     <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>

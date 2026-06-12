@@ -13,3 +13,16 @@ export interface ClassItem {
   tokenCost: number
   isWaitlisted?: boolean
 }
+
+
+export interface BookingRecord {
+  bookingId: string;
+  classId: string;
+  className: string;
+  date: string;
+  time: string;
+  location: string;
+  room: string;
+  instructor: string;
+  status: 'confirmed' | 'waiting' | 'completed' | 'cancelled';
+}

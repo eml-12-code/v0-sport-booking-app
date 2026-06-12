@@ -130,6 +130,8 @@ export async function getClasses(date: Date, location: string, memberId?: number
 
 // ----------------------------------------------------------------------------------------------------
 // Get user's booked classes
+// ----------------------------------------------------------------------------------------------------
+
 export async function getBookedClasses(memberId: number): Promise<BookedClassItem[]> {
   
   console.log("📥 -- START getBookedClasses ----------------------------- 📥 ")
@@ -141,41 +143,66 @@ export async function getBookedClasses(memberId: number): Promise<BookedClassIte
   
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT 
-        b.booking_id AS bookingId, 
+      `
+        /* PART 1: Fetch active entries (Confirmed or Waiting) */
+        SELECT 
+        b.booking_id AS id, 
         b.class_id AS classId, 
-        b.booking_status AS bookingStatus,
+        b.booking_status AS status, 
         c.name AS className, 
-        c.date, 
+        DATE_FORMAT(c.date, '%Y-%m-%d') AS classDate, 
         DATE_FORMAT(c.time, '%l:%i %p') AS time, 
-        c.location,
+        c.location, 
         c.room, 
         c.instructor, 
-        c.spots AS spotRemain
+        c.spots AS spots
        FROM bookings b
        JOIN classes c ON b.class_id = c.class_id
        WHERE b.member_id = ? AND b.booking_status IN ('confirmed', 'waiting')
-       ORDER BY c.date ASC, c.time ASC`,
-      [memberId]
+       /* 🟢 FIXED: Internal ORDER BY removed from here to prevent UNION syntax failures */
+
+       UNION ALL
+
+       /* PART 2: Fetch historically cancelled logs entries */
+       SELECT 
+        tl.log_id AS id, 
+        tl.class_id AS classId, 
+        'cancelled' AS status, 
+        tl.name AS className, 
+        DATE_FORMAT(tl.date, '%Y-%m-%d') AS classDate, 
+        DATE_FORMAT(tl.time, '%l:%i %p') AS time, 
+        tl.location, 
+        tl.room, 
+        'N/A' AS instructor, 
+        0 AS spots
+       FROM transactions_log tl
+       WHERE tl.member_id = ? AND tl.action = 'CANCEL'
+
+       /* 🟢 FIXED: Single sorting declaration safely handles the combined outputs data blocks */
+       ORDER BY classDate ASC, time ASC
+    `,
+       [memberId, String(memberId)]
     )
 
     console.log("📥 [booking.ts -> getBookedClasses ] Total Active Records Found:", rows.length, " for Member ID ", memberId);
-    console.table(rows); 
- 
+    console.table(rows);  
     console.log("📥 -- END  getBookedClasses ----------------------------- 📥 ")
 
+     // Map rows cleanly to pass the frontend's strict isBookingItem type guard checking matrix
+    
     return rows.map((row) => ({
-      bookingId: String(row.bookingId),
+
+      id: String(row.id || row.bookingId),
       classId: String(row.classId),
       className: String(row.className),
       time: String(row.time),
       room: String(row.room),
       instructor: String(row.instructor),
-      date: new Date(row.date).toISOString().split('T')[0],
+      date: String(row.classDate), // 🟢 Pure '2026-06-12' string passed down
       location: String(row.location),
       spots: Number(row.spots ?? 0),
-      status: String(row.bookingStatus),
-    }))
+      status: String(row.status).toLowerCase(),
+    }));
 
   } catch (error) {
     console.error('❌ [booking.ts -> getBookedClasses ] Error fetching booked classes:', error)
@@ -813,5 +840,8 @@ async function debugRedisBookingKeys(keys: {
     console.error("❌ Failed to output Redis debug logs:", error)
   }
 }
+
+
+
 
 
