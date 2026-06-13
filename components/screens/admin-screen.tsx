@@ -1,14 +1,95 @@
 "use client"
 
-import { useState, useRef, useTransition } from "react"
+import { useState, useRef, useTransition, useEffect } from "react"
 import { uploadClassSchedule, type UploadResult } from "@/app/actions/admin"
+
+import { getAdminTimetableStream, getUniqueInstructors, getUniqueClassNames, getUniqueLocations } from "@/app/actions/booking"
 
 export function AdminScreen() {
   const [activeSection, setActiveSection] = useState<string>("overview")
 
+  // 🟢 ADDED: State pools for dynamic selection arrays
+  const [allClasses, setAllClasses] = useState<any[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [availableNames, setAvailableNames] = useState<string[]>([])
+  const [availableInstructors, setAvailableInstructors] = useState<string[]>([])
+  const [availableLocations, setAvailableLocations] = useState<string[]>([])
+
+  // 🟢 ADDED: Filter selections state indicators
+  const [filterLocation, setFilterLocation] = useState<string>("All")
+  const [filterDate, setFilterDate] = useState<string>("")
+  const [filterName, setFilterName] = useState<string>("All")          
+  const [filterInstructor, setFilterInstructor] = useState<string>("All")
+
+
+  // ============
+   // 3. 🟢 PLACED HERE: The single-source real-time search evaluation engine
+  const filteredClasses = allClasses.filter((cls) => {
+    const matchLocation = filterLocation === "All" || cls.location === filterLocation
+    const matchDate = !filterDate || cls.date === filterDate 
+    const matchName = filterName === "All" || cls.name === filterName
+    const matchInstructor = filterInstructor === "All" || cls.instructor === filterInstructor
+
+    return matchLocation && matchDate && matchName && matchInstructor
+  })
+
+  // 4. 🟢 PLACED HERE: The combined asynchronous parallel loader effect loop
+  useEffect(() => {
+
+    async function loadAdminFilterDataPools() {
+      try {
+
+        setLoading(true)
+        
+        // 1. Fetch complete class stream data pool
+        try {
+          const completeDataPool = await getAdminTimetableStream()
+          setAllClasses(completeDataPool || [])
+        } catch (e) {
+          console.error("❌ [ADMIN HUB] getAdminTimetableStream query failed:", e)
+        }
+
+        // 2. Fetch unique class names dropdown data pool
+        try {
+          const uniqueNames = await getUniqueClassNames()
+          setAvailableNames(uniqueNames || [])
+        } catch (e) {
+          console.error("❌ [ADMIN HUB] getUniqueClassNames query failed:", e)
+        }
+
+        // 3. Fetch unique instructor coach names data pool
+        try {
+          const uniqueLocations = await getUniqueLocations()
+          setAvailableLocations(uniqueLocations || [])
+        } catch (e) { 
+          console.error("❌ [ADMIN HUB] getUniqueLocations query failed:", e)
+        }
+
+        // 4. Fetch unique instructor coach names data pool
+        try {
+          const uniqueInstructors = await getUniqueInstructors()
+          setAvailableInstructors(uniqueInstructors || [])
+        } catch (e) {
+          console.error("❌ [ADMIN HUB] getUniqueInstructors query failed:", e)
+        }
+
+      } catch (err) {
+        console.error("Failed to build administrative filter lookup datasets:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadAdminFilterDataPools()
+  }, [])
+
+
+  // ============
+
+
   const menuItems = [
     { id: "overview", label: "Overview", icon: "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" },
-    { id: "classes", label: "Manage Classes", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
+    { id: "classes", label: "Upload Classes", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
+    { id: "explore", label: "List Classes", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
     { id: "bookings", label: "All Bookings", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
     { id: "members", label: "Members", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
     { id: "locations", label: "Locations", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" },
@@ -67,6 +148,31 @@ export function AdminScreen() {
       {/* Upload Schedule Section */}
       {activeSection === "scanner" && <HandleDecodeScan onBack={() => setActiveSection("overview")} />}
 
+      {/* ================================================================== */}
+      
+      {/* 🟢 UPDATED: Passes all dynamic database dropdown filter states straight down into ListScheduleSection */}
+      {activeSection === "explore" && (
+        <div className="w-full flex flex-col items-start text-left justify-start px-1">
+          <ListScheduleSection 
+            onBack={() => setActiveSection("overview")} 
+
+            availableLocations={availableLocations} 
+            availableNames={availableNames}
+            availableInstructors={availableInstructors}
+            filteredClasses={filteredClasses}
+            filterLocation={filterLocation}
+            setFilterLocation={setFilterLocation}
+            filterDate={filterDate}
+            setFilterDate={setFilterDate}
+            filterName={filterName}
+            setFilterName={setFilterName}
+            filterInstructor={filterInstructor}
+            setFilterInstructor={setFilterInstructor}
+            loading={loading}
+          />
+        </div>
+      )}
+      {/* ================================================================== */}
 
       {/* Menu Items (show when on overview) */}
       {activeSection === "overview" && (
@@ -263,6 +369,10 @@ function UploadScheduleSection({ onBack }: { onBack: () => void }) {
 }
 
 
+/* ------------------------------------------------------------------ */
+/* HandleDecodeScan Sub-Section                                       */
+/* ------------------------------------------------------------------ */
+
 // 🟢 FIXED: Capitalized name tells React this is a custom Component piece
 function HandleDecodeScan({ onBack }: { onBack: () => void }) {
 
@@ -317,10 +427,9 @@ function HandleDecodeScan({ onBack }: { onBack: () => void }) {
   }
 
 
-// ---- Return Format ---
+// ---- Return Start  ---
 
   return (
-
     <section className="px-5 py-4 pb-28">
 
       {/* 🟢 MATCHED LAYOUT: Pure horizontal flex grouping button and title together */}
@@ -340,9 +449,6 @@ function HandleDecodeScan({ onBack }: { onBack: () => void }) {
           Check-In Scanner
         </h2>
       </div>
-
-
-
 
       {/* 🟢 FIXED: All related scanner inputs and results layouts wired inside this target card div */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
@@ -411,14 +517,205 @@ function HandleDecodeScan({ onBack }: { onBack: () => void }) {
             </div>
           </div>
         )}
-
       </div>
+
     </section>  
   )
 
-// ----- Return -----
-
-
+// ----- Return End -----
 
 }
 
+
+
+/* ------------------------------------------------------------------ */
+/* HandleListSchedule Sub-Section                                       */
+/* ------------------------------------------------------------------ */
+
+interface ListScheduleSectionProps {
+  onBack: () => void
+  availableLocations: string[]
+  availableNames: string[]
+  availableInstructors: string[]
+  filteredClasses: any[]
+  filterLocation: string
+  setFilterLocation: (val: string) => void
+  filterDate: string
+  setFilterDate: (val: string) => void
+  filterName: string
+  setFilterName: (val: string) => void
+  filterInstructor: string
+  setFilterInstructor: (val: string) => void
+  loading: boolean
+}
+
+export function ListScheduleSection({ 
+  onBack, 
+  availableLocations,
+  availableNames, 
+  availableInstructors,
+  filteredClasses,
+  filterLocation,
+  setFilterLocation,
+  filterDate,
+  setFilterDate,
+  filterName,
+  setFilterName,
+  filterInstructor,
+  setFilterInstructor,
+  loading
+}: ListScheduleSectionProps) {
+
+
+// ------------------------------------------
+// 
+// ------------------------------------------
+
+  return (
+
+    /* 🟢 ABSOLUTE LEFT ALIGNMENT OVERRIDE CONTAINER */
+    <section className="w-full px-5 py-4 pb-28 text-left flex flex-col items-start justify-start animate-fade-in">
+      
+      {/* Consistent Left-Aligned Header Block matching your Image Reference Layout */}
+      <div className="flex items-center justify-start gap-4 mb-6 w-full text-left">
+        <button
+          onClick={onBack}
+          className="w-10 h-10 rounded-full bg-background border border-border flex items-center justify-center hover:bg-muted transition-colors shadow-sm shrink-0"
+          title="Back to Dashboard"
+        >
+          <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <h2 className="text-xl font-bold text-[#212529] tracking-tight leading-none text-left">
+          List Classes
+        </h2>
+      </div>
+
+      {/* 🟢 THE FILTER CONTROLS HUB BOX CARD */}
+      <div className="w-full max-w-4xl bg-card border border-border rounded-xl p-5 shadow-sm text-left mb-6 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+        
+        {/* Filter 1: Dynamic Location Dropdown Selector */}
+        <div className="flex flex-col gap-1.5 text-left items-start w-full">
+          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5">Location</label>
+          <select
+            value={filterLocation}
+            onChange={(e) => setFilterLocation(e.target.value)}
+            className="w-full h-10 px-3 bg-muted/40 border border-border rounded-xl text-sm focus:outline-none focus:border-primary transition-colors cursor-pointer"
+          >
+            <option value="All">All Regions</option>
+            
+            {/* 🟢 FIXED: Dynamic mapping loop replaces old manual layout configuration listings */}
+            {availableLocations && availableLocations.length > 0 && availableLocations.map((loc) => (
+              <option key={loc} value={loc}>
+                {loc}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Filter B: Date Picker Calendar */}
+        <div className="flex flex-col gap-1.5 text-left items-start w-full">
+          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5">Filter Date</label>
+          <input
+            type="date"
+            // Ensures an empty field defaults to an empty string "" instead of falling back to undefined
+            value={filterDate || ""}            
+            onChange={(e) => {
+              const selectedValue = e.target.value; // Guaranteed by HTML5 spec to be "YYYY-MM-DD"
+              
+              // 🔬 TRACE LOG: Verifies the exact string structure arriving at your client state engine
+              console.log(`📅 [Admin Calendar Input] Selected date value string: "${selectedValue}"`);
+              
+              setFilterDate(selectedValue);
+            }}
+            className="w-full h-10 px-3 bg-muted/40 border border-border rounded-xl text-sm focus:outline-none focus:border-primary transition-colors cursor-pointer"
+          />
+        </div>
+
+        {/* Filter C: Dynamic Class Name Selection Menu */}
+        <div className="flex flex-col gap-1.5 text-left items-start w-full">
+          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5">Class Name</label>
+          <select
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+            className="w-full h-10 px-3 bg-muted/40 border border-border rounded-xl text-sm focus:outline-none focus:border-primary transition-colors cursor-pointer"
+          >
+            <option value="All">All Classes</option>
+            {/* 🟢 FIXED: Loop through the availableNames prop passed down from parent */}
+            {availableNames && availableNames.length > 0 && availableNames.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Filter Dß: Dynamic Instructor Selection Menu */}
+        <div className="flex flex-col gap-1.5 text-left items-start w-full">
+          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5">Instructor</label>
+          <select
+            value={filterInstructor}
+            onChange={(e) => setFilterInstructor(e.target.value)}
+            className="w-full h-10 px-3 bg-muted/40 border border-border rounded-xl text-sm focus:outline-none focus:border-primary transition-colors cursor-pointer"
+          >
+            <option value="All">All Instructors</option>
+            {/* 🟢 FIXED: Loop through the availableInstructors prop passed down from parent */}
+            {availableInstructors && availableInstructors.length > 0 && availableInstructors.map((ins) => (
+              <option key={ins} value={ins}>{ins}</option>
+            ))}
+          </select>
+        </div>
+
+
+      </div>
+
+      {/* 🟢 CLASSES LOG STREAM CARDS CONTAINER */}
+      <div className="w-full max-w-4xl space-y-3 text-left">
+        {loading ? (
+          <div className="flex justify-center py-12 bg-card border border-border rounded-xl w-full">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filteredClasses.length === 0 ? (
+          <div className="bg-card border border-border border-dashed rounded-xl p-10 text-center text-muted-foreground text-sm font-medium w-full">
+            No matching sessions found matching current filter rules.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+            {filteredClasses.map((cls: any) => (
+              <div key={cls.classId} className="relative bg-card border border-border rounded-xl p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-all text-left items-start">
+                {/* Left accent ribbon bar */}
+                <div className="absolute top-0 left-0 bottom-0 w-1 bg-[#2A52BE] rounded-l-xl" />
+                
+                <div className="pl-2 w-full space-y-1">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-[9px] font-extrabold text-[#2A52BE] uppercase bg-[#2A52BE]/5 px-2 py-0.5 rounded border border-[#2A52BE]/10">
+                      📍 {cls.location}
+                    </span>
+                    <span className="text-xs font-mono font-bold text-muted-foreground">
+                      {cls.classId}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-extrabold text-foreground uppercase tracking-tight pt-1">
+                    {cls.name}
+                  </h3>
+
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    📅 {String(cls.date).split("T")[0]} • 🕒 {cls.time} ({cls.duration} mins)
+                  </p>
+
+                  <div className="pt-2 flex items-center justify-between text-xs text-muted-foreground border-t border-muted mt-2 w-full">
+                    <span>👤 Coach: <strong className="text-foreground">{cls.instructor}</strong></span>
+                    <span className="font-bold text-foreground">
+                      🚪 {cls.room} ({cls.spots}/{cls.classSize} spots)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+    </section>
+  )
+}

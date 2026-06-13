@@ -59,7 +59,9 @@ export async function getClasses(date: Date, location: string, memberId?: number
       // 3. MySQL Query matching your signature's date and location parameters
       const [rows] = await pool.execute<RowDataPacket[]>(
         `SELECT 
-          class_id, name, date, time, room, instructor, 
+          class_id, name, 
+          DATE_FORMAT(date, '%Y-%m-%d') AS classDate, 
+          time, room, instructor, 
           duration, spots, class_size, color, token_cost 
         FROM classes 
         WHERE DATE(date) = ? AND location = ?
@@ -71,7 +73,7 @@ export async function getClasses(date: Date, location: string, memberId?: number
       classesBaseArray = rows.map((row: any) => ({
         classId: row.class_id,
         name: row.name,
-        date: String(row.date),
+        date: String(row.classDate),
         time: String(row.time),
         room: row.room,
         instructor: row.instructor,
@@ -842,6 +844,97 @@ async function debugRedisBookingKeys(keys: {
 }
 
 
+// --------------------------
+// getAdminTimetableStream
+// --------------------------
+export async function getAdminTimetableStream(): Promise<any[]> {
+  console.log("📥 [booking.ts -> getAdminTimetableStream] Fetching global admin timetable...")
+  
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT 
+        class_id AS classId, 
+        name, 
+        DATE_FORMAT(date, '%Y-%m-%d') AS classDate, -- 🟢 Timezone-safe raw string
+        time, 
+        room, 
+        instructor, 
+        duration, 
+        spots, 
+        class_size AS classSize, 
+        color, 
+        location
+       FROM classes 
+       ORDER BY date ASC, time ASC`
+    )
+
+    return rows.map((row) => ({
+      classId: String(row.classId),
+      name: String(row.name),
+      date: String(row.classDate), 
+      time: String(row.time),
+      room: String(row.room),
+      instructor: String(row.instructor),
+      duration: Number(row.duration),
+      spots: Number(row.spots),
+      classSize: Number(row.classSize),
+      color: String(row.color),
+      location: String(row.location),
+    }))
+  } catch (error) {
+    console.error("❌ Failed to stream admin timetable:", error)
+    return []
+  }
+}
+
+// ----------------------------
+// getUniqueClassNames
+// ----------------------------
+
+export async function getUniqueClassNames(): Promise<string[]> {
+  try {
+    // DISTINCT ensures each name only appears once in the list
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT DISTINCT name FROM classes WHERE name IS NOT NULL ORDER BY name ASC`
+    )
+    return rows.map((row) => String(row.name))
+  } catch (error) {
+    console.error("Failed to fetch unique class names:", error)
+    return []
+  }
+}
 
 
+// ----------------------------
+// getUniqueInstructors
+// ----------------------------
+
+export async function getUniqueInstructors(): Promise<string[]> {
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT DISTINCT instructor FROM classes WHERE instructor IS NOT NULL ORDER BY instructor ASC`
+    )
+    return rows.map((row) => String(row.instructor))
+  } catch (error) {
+    console.error("Failed to fetch unique instructors:", error)
+    return []
+  }
+}
+
+// ----------------------------
+// getUniqueLocations
+// ----------------------------
+
+export async function getUniqueLocations(): Promise<string[]> {
+  try {
+    // 🟢 FIXED: Pull unique location strings from database dynamically
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT DISTINCT location FROM classes WHERE location IS NOT NULL AND location != '' ORDER BY location ASC`
+    )
+    return rows.map((row) => String(row.location))
+  } catch (error) {
+    console.error("❌ [booking.ts] Failed to query dynamic unique location rows:", error)
+    return ["Hong Kong", "Kowloon", "Macau"] // Safe structural fallback if table is empty
+  }
+}
 
