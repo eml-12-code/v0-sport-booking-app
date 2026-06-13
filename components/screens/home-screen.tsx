@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { getBookedClasses } from "@/app/actions/booking"
 import { getAccountProfile } from '@/app/actions/account' 
 import { useSession } from "next-auth/react"
+import { ClassQrModal } from "@/components/ui/class-qr-modal" // 🟢 ADDED: Modal import
 
 interface BookingItem {
   id: string
@@ -18,8 +19,13 @@ interface BookingItem {
 
 export function HomeScreen() {
   const [todayBookings, setTodayBookings] = useState<BookingItem[]>([])
+  const [memberId, setMemberId] = useState<number>(0) // 🟢 ADD THIS LINE HERE
   const [loading, setLoading] = useState(true)
   const { data: session } = useSession()
+
+  // 🟢 ADDED: State trackers to handle modal trigger bindings
+  const [isQrOpen, setIsQrOpen] = useState(false)
+  const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null)
 
   const userId =
     session?.user?.email?.trim() ||
@@ -29,29 +35,26 @@ export function HomeScreen() {
   useEffect(() => {
     async function fetchTodayBookings() {
       try {
+          console.log("--------------userId ", userId)
 
-        console.log ( "--------------userId " , userId )
+            const profile = await getAccountProfile()
+            const currentMemberId = profile ? profile.memberId : 0
+            
+            // 🟢 ADD THIS LINE: Save it to state so the layout can read it globally!
+            setMemberId(currentMemberId) 
 
-        // ---------
-        // Fetch the user's database profile securely from the server
-        const profile = await getAccountProfile()
+            const bookings = await getBookedClasses(currentMemberId)
+            
+            const todayStr = new Date().toLocaleDateString("en-CA") 
+            const todayOnly = bookings.filter((b: any) => String(b.date) === todayStr)
+            setTodayBookings(todayOnly)
+          } catch (error) {
+            console.error("Error fetching bookings:", error)
+          } finally {
+            setLoading(false)
+          }
+        }
 
-        // Extract the numeric memberId, default to 0 if not logged in
-        const memberId = profile ? profile.memberId : 0
-
-        // ---------
-        const bookings = await getBookedClasses(memberId)
-        
-        // Filter for today's bookings
-        const today = new Date().toISOString().split('T')[0]
-        const todayOnly = bookings.filter((b: BookingItem) => b.date === today)
-        setTodayBookings(todayOnly)
-      } catch (error) {
-        console.error("Error fetching bookings:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchTodayBookings()
   }, [userId])
 
@@ -113,7 +116,7 @@ export function HomeScreen() {
         ) : (
           <div className="space-y-4">
             {todayBookings.map((booking) => (
-              <div key={booking.id} className="bg-card border border-border rounded-xl p-4">
+              <div key={booking.id} className="bg-card border border-border rounded-xl p-4 shadow-sm">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <p className="text-primary font-semibold">{booking.time}</p>
@@ -140,17 +143,50 @@ export function HomeScreen() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-primary">
-                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+
+                  {/* 🟢 FIXED: Compact, highly actionable QR Code Generator launch trigger element icon */}
+                  <button
+                    onClick={() => {
+                      setSelectedBooking(booking)
+                      setIsQrOpen(true)
+                    }}
+                    className="ml-4 p-2.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 active:scale-[0.97] transition-all flex items-center justify-center shrink-0 border border-primary/20"
+                    title="Generate Check-In Pass"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 12v1.5m0 3v1.5m-3-4.5H12m3 4.5H12m6-1.5h1.5M12 18h1.5M18 14.625h1.5" />
                     </svg>
-                  </div>
+                  </button>
+
                 </div>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      {/* 🟢 FIXED: Portal mounts the popup window, overlaying the custom laser bar layout */}
+      {selectedBooking && (
+        <ClassQrModal 
+          isOpen={isQrOpen} 
+          onClose={() => {
+            setIsQrOpen(false)
+            setSelectedBooking(null)
+          }} 
+          classInfo={{
+            bookingId: selectedBooking.id,
+            memberId: memberId, 
+            classId: selectedBooking.classId,
+            className: selectedBooking.className,
+            date: selectedBooking.date,
+            time: selectedBooking.time,
+            location: selectedBooking.location,
+            room: selectedBooking.room
+          }}
+        />
+      )}
     </div>
   )
 }
+

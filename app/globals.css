@@ -147,3 +147,19 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+
+/* 🟢 ADD THIS TO THE BOTTOM OF YOUR /app/globals.css FILE */
+
+@theme {
+  --animate-scan: scan 2.5s ease-in-out infinite;
+
+  @keyframes scan {
+    0%, 100% {
+      top: 5%;
+    }
+    50% {
+      top: 92%;
+    }
+  }
+}

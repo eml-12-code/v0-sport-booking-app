@@ -13,6 +13,7 @@ export function AdminScreen() {
     { id: "members", label: "Members", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
     { id: "locations", label: "Locations", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" },
     { id: "reports", label: "Reports", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+    { id: "scanner", label: "Check-In Scanner", icon: "M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM12 4.5L20.25 12M20.25 4.5L12 12" },
   ]
 
   return (
@@ -62,6 +63,10 @@ export function AdminScreen() {
 
       {/* Upload Schedule Section */}
       {activeSection === "classes" && <UploadScheduleSection onBack={() => setActiveSection("overview")} />}
+
+      {/* Upload Schedule Section */}
+      {activeSection === "scanner" && <HandleDecodeScan onBack={() => setActiveSection("overview")} />}
+
 
       {/* Menu Items (show when on overview) */}
       {activeSection === "overview" && (
@@ -143,6 +148,7 @@ function UploadScheduleSection({ onBack }: { onBack: () => void }) {
         <button
           onClick={onBack}
           className="w-9 h-9 rounded-lg bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors"
+          title="Back to Dashboard"
         >
           <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -255,3 +261,164 @@ function UploadScheduleSection({ onBack }: { onBack: () => void }) {
     </section>
   )
 }
+
+
+// 🟢 FIXED: Capitalized name tells React this is a custom Component piece
+function HandleDecodeScan({ onBack }: { onBack: () => void }) {
+
+   // 1. Core State Trackers local to the Scanner Component
+  const [scannedInput, setScannedInput] = useState<string>("")
+  const [decodedData, setDecodedData] = useState<any>(null)
+  const [decodeError, setDecodeError] = useState<string>("")
+
+  // 2. Decryption Engine: Runs inverse client-side Base64 line splits mapping arrays
+  const handleDecodeScan = () => {
+    try {
+      setDecodeError("")
+      setDecodedData(null)
+
+      if (!scannedInput.trim()) {
+        setDecodeError("Please enter or paste a scanned QR code token string.")
+        return
+      }
+
+      // Decode base-64 text back into human-readable multi-line strings
+      const decodedText = decodeURIComponent(escape(atob(scannedInput.trim())))
+      console.log("🔓 [Admin Scanner Terminal] Extracted Payload:\n", decodedText)
+
+      // Map structural text tokens split on newlines straight into a dictionary map
+      const lines = decodedText.split("\n")
+      const dataMap: Record<string, string> = {}
+
+      lines.forEach((line) => {
+        const parts = line.split(": ")
+        if (parts.length >= 2) {
+          const key = parts[0].trim().toLowerCase()
+          const value = parts.slice(1).join(": ").trim()
+          dataMap[key] = value
+        }
+      })
+
+      // Populate layout parameters variables state hooks
+      setDecodedData({
+        memberId: dataMap["member_id"] || "N/A",
+        bookingId: dataMap["booking_id"] || "N/A",
+        classId: dataMap["class_id"] || "N/A",
+        className: dataMap["name"] || "N/A",
+        date: dataMap["date"] || "N/A",
+        time: dataMap["time"] || "N/A",
+        location: dataMap["location"] || "N/A",
+      })
+
+    } catch (err) {
+      console.error("Token decoding failed:", err)
+      setDecodeError("Invalid QR Token Matrix. This data stream cannot be parsed safely.")
+    }
+  }
+
+
+// ---- Return Format ---
+
+  return (
+
+    <section className="px-5 py-4 pb-28">
+
+      {/* 🟢 MATCHED LAYOUT: Pure horizontal flex grouping button and title together */}
+      <div className="flex items-center gap-3 mb-5">
+        <button
+          onClick={onBack}
+          className="w-9 h-9 rounded-lg bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors"
+          title="Back to Dashboard"
+        >
+          <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        
+        {/* 🟢 MATCHED TYPOGRAPHY: Clean, single-line bold header title aligned tightly to the left */}
+        <h2 className="text-xl font-bold text-[#212529] tracking-tight leading-none">
+          Check-In Scanner
+        </h2>
+      </div>
+
+
+
+
+      {/* 🟢 FIXED: All related scanner inputs and results layouts wired inside this target card div */}
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        
+        {/* Text Input Block */}
+        <div className="flex flex-col gap-1.5">
+          <h3 className="text-sm font-semibold text-foreground mb-2">
+            Raw Barcode Input Stream
+          </h3>
+          <textarea
+            value={scannedInput}
+            onChange={(e) => setScannedInput(e.target.value)}
+            placeholder="Paste the raw obfuscated string sequence output copied from the user check-in passes here..."
+            className="w-full h-24 p-3 bg-muted/40 border border-border rounded-xl text-xs font-mono focus:outline-none focus:border-primary transition-colors resize-none shadow-inner"
+          />
+        </div>
+
+        {/* Action Submit Action Button */}
+        <button
+          onClick={handleDecodeScan}
+          className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-extrabold rounded-xl transition-all shadow-sm uppercase tracking-wider"
+        >
+          Verify Pass Ticket
+        </button>
+
+        {/* Error reporting notice sheets blocks */}
+        {decodeError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs font-semibold text-red-500 flex items-center gap-2">
+            <span>⚠️</span> {decodeError}
+          </div>
+        )}
+
+        {/* VERIFICATION VERDICT: Decoded passport data display sheet grid */}
+        {decodedData && (
+          <div className="border-t border-dashed border-border pt-4 mt-2 space-y-3.5">
+            <div className="flex items-center justify-between px-0.5">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Pass Verification Ledger</span>
+              <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-wider shadow-sm animate-pulse">
+                ✓ Valid Entry Ticket
+              </span>
+            </div>
+
+            <div className="bg-muted/30 rounded-xl p-4 border border-border/40 space-y-3 text-sm font-medium shadow-inner">
+              <div className="flex justify-between border-b border-border/40 pb-2">
+                <span className="text-muted-foreground text-xs font-medium">Customer Member ID:</span>
+                <span className="font-extrabold text-foreground">👤 {decodedData.memberId}</span>
+              </div>
+              <div className="flex justify-between border-b border-border/40 pb-2">
+                <span className="text-muted-foreground text-xs font-medium">Booking reference ID:</span>
+                <span className="font-bold text-primary font-mono">{decodedData.bookingId}</span>
+              </div>
+              <div className="flex justify-between border-b border-border/40 pb-2">
+                <span className="text-muted-foreground text-xs font-medium">Target Class Index:</span>
+                <span className="font-bold text-foreground font-mono">{decodedData.classId}</span>
+              </div>
+              <div className="flex justify-between border-b border-border/40 pb-2">
+                <span className="text-muted-foreground text-xs font-medium">Class Event Title:</span>
+                <span className="font-extrabold text-foreground uppercase tracking-tight">{decodedData.className}</span>
+              </div>
+              <div className="flex justify-between items-center pt-0.5">
+                <span className="text-muted-foreground text-xs font-medium">Schedule Window slot:</span>
+                <span className="text-foreground text-xs font-bold bg-background px-2.5 py-1 rounded-lg border border-border/40 shadow-sm">
+                  📅 {decodedData.date} • {decodedData.time}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </section>  
+  )
+
+// ----- Return -----
+
+
+
+}
+
