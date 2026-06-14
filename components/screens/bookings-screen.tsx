@@ -122,18 +122,18 @@ useEffect(() => {
 
     const isPastClass = classDateStr < todayStr
 
-    if (booking.classId === "HK-10" || classDateStr.includes("06-12") || classDateStr.includes("2026-06-12")) {
-      console.log("⚡ [FILTER DEBUG] Evaluating item:", {
-        className: booking.className,
-        classId: booking.classId,
-        classDateStr: classDateStr,
-        todayStr: todayStr,
-        currentStatus: currentStatus,
-        activeTab: activeTab,
-        isPastClass: isPastClass,
-        matchesUpcomingCondition: (currentStatus === "confirmed" && !isPastClass)
-      });
-    }
+    // if (booking.classId === "HK-10" || classDateStr.includes("06-12") || classDateStr.includes("2026-06-12")) {
+    //  console.log("⚡ [FILTER DEBUG] Evaluating item:", {
+    //    className: booking.className,
+    //    classId: booking.classId,
+    //    classDateStr: classDateStr,
+    //    todayStr: todayStr,
+    //    currentStatus: currentStatus,
+    //    activeTab: activeTab,
+    //    isPastClass: isPastClass,
+    //    matchesUpcomingCondition: (currentStatus === "confirmed" && !isPastClass)
+    //  });
+    //}
 
     if (activeTab === "upcoming") {
       return booking.status === "confirmed" && !isPastClass

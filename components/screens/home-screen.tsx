@@ -144,19 +144,16 @@ export function HomeScreen() {
                     </div>
                   </div>
 
-                  {/* 🟢 FIXED: Compact, highly actionable QR Code Generator launch trigger element icon */}
+                    {/* 🟢 FIXED: Removed 'uppercase' utility so text renders exactly as written */}
                   <button
                     onClick={() => {
                       setSelectedBooking(booking)
                       setIsQrOpen(true)
                     }}
-                    className="ml-4 p-2.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 active:scale-[0.97] transition-all flex items-center justify-center shrink-0 border border-primary/20"
-                    title="Generate Check-In Pass"
+                    className="ml-4 px-6 h-10 bg-[#2A52BE] hover:bg-[#1A3A9E] active:scale-95 text-white font-bold text-sm rounded-full shadow-sm transition-all flex items-center justify-center shrink-0 tracking-wide border border-transparent"
+                    title="Show Check-In Passport"
                   >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 12v1.5m0 3v1.5m-3-4.5H12m3 4.5H12m6-1.5h1.5M12 18h1.5M18 14.625h1.5" />
-                    </svg>
+                    Show QR
                   </button>
 
                 </div>
